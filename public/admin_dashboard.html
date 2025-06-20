@@ -57,6 +57,10 @@
                                 <input type="text" class="form-control" id="est-nombre" required>
                             </div>
                             <div class="mb-3">
+                                <label for="est-cedula" class="form-label">Cédula de Identidad</label>
+                                <input type="text" class="form-control" id="est-cedula" required>
+                            </div>
+                            <div class="mb-3">
                                 <label for="est-grado" class="form-label">Grado</label>
                                 <select class="form-select" id="est-grado" required>
                                     <option value="">Seleccione un grado</option>
@@ -91,10 +95,8 @@
                     <div class="card-body">
                         <form id="form-registrar-nota">
                             <div class="mb-3">
-                                <label for="nota-estudiante" class="form-label">Seleccionar Estudiante</label>
-                                <select class="form-select" id="nota-estudiante" required>
-                                    <option value="">Cargando estudiantes...</option>
-                                </select>
+                                <label for="nota-cedula-estudiante" class="form-label">Cédula del Estudiante</label>
+                                <input type="text" class="form-control" id="nota-cedula-estudiante" required placeholder="Ingrese la cédula...">
                             </div>
                              <div class="mb-3">
                                 <label for="nota-materia" class="form-label">Materia</label>
@@ -134,6 +136,21 @@
             </div>
 
             <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                     <div class="card-header">
+                        <h4>Estudiantes Registrados</h4>
+                    </div>
+                    <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                        <ul class="list-group" id="lista-estudiantes">
+                            <!-- La lista se llenará dinámicamente -->
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-2">
+            <div class="col-12">
                 <h3>Representantes Registrados</h3>
                 <ul class="list-group" id="lista-representantes">
                     <!-- La lista se llenará dinámicamente -->
@@ -147,8 +164,8 @@
         const formEstudiante = document.getElementById('form-registrar-estudiante');
         const formNota = document.getElementById('form-registrar-nota');
         const selectRepresentante = document.getElementById('est-representante');
-        const selectEstudianteParaNota = document.getElementById('nota-estudiante');
         const listaRepresentantes = document.getElementById('lista-representantes');
+        const listaEstudiantes = document.getElementById('lista-estudiantes');
         const alertContainer = document.getElementById('alert-container');
 
         // Función para mostrar alertas
@@ -163,20 +180,23 @@
             alertContainer.append(wrapper);
         }
 
-        async function cargarEstudiantesParaNotas() {
+        async function cargarEstudiantes() {
             try {
                 const response = await fetch('/api/estudiantes');
                 if (!response.ok) throw new Error('No se pudo cargar la lista de estudiantes.');
                 const estudiantes = await response.json();
 
-                selectEstudianteParaNota.innerHTML = '<option value="">Seleccione un estudiante</option>';
-                
-                estudiantes.forEach(est => {
-                    const option = document.createElement('option');
-                    option.value = est.id;
-                    option.textContent = `${est.nombre} (Rep: ${est.nombre_representante})`;
-                    selectEstudianteParaNota.appendChild(option);
-                });
+                listaEstudiantes.innerHTML = '';
+                if (estudiantes.length === 0) {
+                    listaEstudiantes.innerHTML = '<li class="list-group-item">No hay estudiantes registrados.</li>';
+                } else {
+                    estudiantes.forEach(est => {
+                        const li = document.createElement('li');
+                        li.className = 'list-group-item';
+                        li.textContent = `${est.nombre} (C.I: ${est.cedula}) - ${est.grado} - Rep: ${est.nombre_representante}`;
+                        listaEstudiantes.appendChild(li);
+                    });
+                }
             } catch (error) {
                 showAlert(error.message, 'danger');
             }
@@ -241,6 +261,7 @@
              e.preventDefault();
             const body = {
                 nombre: document.getElementById('est-nombre').value,
+                cedula: document.getElementById('est-cedula').value,
                 grado: document.getElementById('est-grado').value,
                 id_representante: document.getElementById('est-representante').value
             };
@@ -256,7 +277,7 @@
 
                 showAlert('Estudiante registrado con éxito.');
                 formEstudiante.reset();
-                cargarEstudiantesParaNotas(); // Recargar la lista de estudiantes en el form de notas
+                cargarEstudiantes(); // Recargar la lista de estudiantes
             } catch (error) {
                 showAlert(error.message, 'danger');
             }
@@ -266,7 +287,7 @@
         formNota.addEventListener('submit', async (e) => {
             e.preventDefault();
             const body = {
-                id_estudiante: document.getElementById('nota-estudiante').value,
+                cedula_estudiante: document.getElementById('nota-cedula-estudiante').value,
                 materia: document.getElementById('nota-materia').value,
                 calificacion: document.getElementById('nota-calificacion').value,
                 periodo: document.getElementById('nota-periodo').value
@@ -291,7 +312,7 @@
         // Carga inicial
         document.addEventListener('DOMContentLoaded', () => {
             cargarRepresentantes();
-            cargarEstudiantesParaNotas();
+            cargarEstudiantes();
         });
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

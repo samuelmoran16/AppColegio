@@ -112,6 +112,8 @@
                                     <h5 class="card-title">${hijo.nombre}</h5>
                                     <h6 class="card-subtitle mb-2 text-muted">${hijo.grado}</h6>
                                     <p class="card-text">
+                                        Cédula: ${hijo.cedula || 'No registrada'}
+                                        <br>
                                         Fecha de Nacimiento: ${hijo.fecha_nacimiento ? new Date(hijo.fecha_nacimiento).toLocaleDateString() : 'No registrada'}
                                     </p>
                                     <button class="btn btn-primary" onclick="verNotas(${hijo.id}, '${hijo.nombre}')">Ver Notas</button>

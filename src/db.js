@@ -33,6 +33,7 @@ const initDB = async () => {
     await pool.query(`CREATE TABLE IF NOT EXISTS estudiantes (
       id SERIAL PRIMARY KEY,
       nombre VARCHAR(255) NOT NULL,
+      cedula VARCHAR(20) UNIQUE,
       fecha_nacimiento DATE,
       grado VARCHAR(50),
       id_representante INTEGER REFERENCES representantes(id)
