@@ -34,6 +34,7 @@ const initDB = async () => {
       id SERIAL PRIMARY KEY,
       nombre VARCHAR(255) NOT NULL,
       fecha_nacimiento DATE,
+      grado VARCHAR(50),
       id_representante INTEGER REFERENCES representantes(id)
     )`);
 

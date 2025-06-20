@@ -57,8 +57,16 @@
                                 <input type="text" class="form-control" id="est-nombre" required>
                             </div>
                             <div class="mb-3">
-                                <label for="est-fecha-nacimiento" class="form-label">Fecha de Nacimiento</label>
-                                <input type="date" class="form-control" id="est-fecha-nacimiento">
+                                <label for="est-grado" class="form-label">Grado</label>
+                                <select class="form-select" id="est-grado" required>
+                                    <option value="">Seleccione un grado</option>
+                                    <option value="1er Grado">1er Grado</option>
+                                    <option value="2do Grado">2do Grado</option>
+                                    <option value="3er Grado">3er Grado</option>
+                                    <option value="4to Grado">4to Grado</option>
+                                    <option value="5to Grado">5to Grado</option>
+                                    <option value="6to Grado">6to Grado</option>
+                                </select>
                             </div>
                             <div class="mb-3">
                                 <label for="est-representante" class="form-label">Asignar a Representante</label>
@@ -90,7 +98,19 @@
                             </div>
                              <div class="mb-3">
                                 <label for="nota-materia" class="form-label">Materia</label>
-                                <input type="text" class="form-control" id="nota-materia" required>
+                                <select class="form-select" id="nota-materia" required>
+                                    <option value="">Seleccione una materia</option>
+                                    <option value="Lengua">Lengua</option>
+                                    <option value="Ingles">Inglés</option>
+                                    <option value="Frances">Francés</option>
+                                    <option value="Ciencias y Tecnología">Ciencias y Tecnología</option>
+                                    <option value="Matematicas">Matemáticas</option>
+                                    <option value="Ciencias Sociales">Ciencias Sociales</option>
+                                    <option value="Computación">Computación</option>
+                                    <option value="Artes plasticas">Artes Plásticas</option>
+                                    <option value="Educación Fisica">Educación Física</option>
+                                    <option value="Musica">Música</option>
+                                </select>
                             </div>
                             <div class="row">
                                 <div class="col-6 mb-3">
@@ -99,7 +119,12 @@
                                 </div>
                                 <div class="col-6 mb-3">
                                     <label for="nota-periodo" class="form-label">Período</label>
-                                    <input type="text" class="form-control" id="nota-periodo" placeholder="Ej: Lapso 1" required>
+                                    <select class="form-select" id="nota-periodo" required>
+                                        <option value="">Seleccione un lapso</option>
+                                        <option value="1er Lapso">1er Lapso</option>
+                                        <option value="2do Lapso">2do Lapso</option>
+                                        <option value="3er Lapso">3er Lapso</option>
+                                    </select>
                                 </div>
                             </div>
                             <button type="submit" class="btn btn-info">Registrar Nota</button>
@@ -216,7 +241,7 @@
              e.preventDefault();
             const body = {
                 nombre: document.getElementById('est-nombre').value,
-                fecha_nacimiento: document.getElementById('est-fecha-nacimiento').value,
+                grado: document.getElementById('est-grado').value,
                 id_representante: document.getElementById('est-representante').value
             };
 

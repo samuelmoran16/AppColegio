@@ -128,14 +128,14 @@ app.post('/api/representantes', auth('admin'), async (req, res) => {
 
 // Registrar un nuevo estudiante
 app.post('/api/estudiantes', auth('admin'), async (req, res) => {
-    const { nombre, fecha_nacimiento, id_representante } = req.body;
-     if (!nombre || !id_representante) {
-        return res.status(400).send('El nombre y el representante son obligatorios.');
+    const { nombre, fecha_nacimiento, grado, id_representante } = req.body;
+     if (!nombre || !id_representante || !grado) {
+        return res.status(400).send('El nombre, grado y representante son obligatorios.');
     }
     try {
         const result = await db.query(
-            'INSERT INTO estudiantes (nombre, fecha_nacimiento, id_representante) VALUES ($1, $2, $3) RETURNING *',
-            [nombre, fecha_nacimiento || null, id_representante]
+            'INSERT INTO estudiantes (nombre, fecha_nacimiento, grado, id_representante) VALUES ($1, $2, $3, $4) RETURNING *',
+            [nombre, fecha_nacimiento || null, grado, id_representante]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -148,7 +148,7 @@ app.post('/api/estudiantes', auth('admin'), async (req, res) => {
 app.get('/api/estudiantes', auth('admin'), async (req, res) => {
     try {
         const result = await db.query(`
-            SELECT e.id, e.nombre, r.nombre as nombre_representante 
+            SELECT e.id, e.nombre, e.grado, r.nombre as nombre_representante 
             FROM estudiantes e 
             JOIN representantes r ON e.id_representante = r.id 
             ORDER BY e.nombre
@@ -189,7 +189,7 @@ app.get('/api/representante/dashboard', auth('representante'), async (req, res) 
         const repResult = await db.query('SELECT nombre, email FROM representantes WHERE id = $1', [id_representante]);
         
         // Obtener la lista de hijos
-        const hijosResult = await db.query('SELECT id, nombre, fecha_nacimiento FROM estudiantes WHERE id_representante = $1 ORDER BY nombre', [id_representante]);
+        const hijosResult = await db.query('SELECT id, nombre, fecha_nacimiento, grado FROM estudiantes WHERE id_representante = $1 ORDER BY nombre', [id_representante]);
 
         if (repResult.rows.length === 0) {
             return res.status(404).json({ message: 'Representante no encontrado.' });
