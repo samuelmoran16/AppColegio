@@ -428,23 +428,65 @@ app.post('/api/admin/generar-mensualidades', auth('admin'), async (req, res) => 
     try {
         const { estudiante_id, año } = req.body;
         
+        // Validaciones
+        if (!estudiante_id || !año) {
+            return res.status(400).json({ message: 'Estudiante y año son obligatorios.' });
+        }
+
+        // Verificar que el estudiante existe
+        const estudianteExiste = await db.query('SELECT id, nombre FROM estudiantes WHERE id = $1', [estudiante_id]);
+        if (estudianteExiste.rows.length === 0) {
+            return res.status(404).json({ message: 'Estudiante no encontrado.' });
+        }
+
+        const estudiante = estudianteExiste.rows[0];
+        let mensualidadesGeneradas = 0;
+        let mensualidadesExistentes = 0;
+        
         // Generar mensualidades para todo el año
         for (let mes = 1; mes <= 12; mes++) {
-            // Verificar si ya existe
-            const existe = await db.query('SELECT id FROM pagos WHERE id_estudiante = $1 AND mes = $2 AND año = $3', [estudiante_id, mes, año]);
-            if (existe.rows.length === 0) {
-                const fechaVencimiento = new Date(año, mes, 0);
-                await db.query(`
-                    INSERT INTO pagos (id_estudiante, mes, año, monto, estado, fecha_vencimiento)
-                    VALUES ($1, $2, $3, $4, 'pendiente', $5)
-                `, [estudiante_id, mes, año, 12480.00, fechaVencimiento]);
+            try {
+                // Verificar si ya existe
+                const existe = await db.query('SELECT id FROM pagos WHERE id_estudiante = $1 AND mes = $2 AND año = $3', [estudiante_id, mes, año]);
+                if (existe.rows.length === 0) {
+                    // Calcular fecha de vencimiento (último día del mes)
+                    const fechaVencimiento = new Date(año, mes, 0);
+                    
+                    await db.query(`
+                        INSERT INTO pagos (id_estudiante, mes, año, monto, estado, fecha_vencimiento)
+                        VALUES ($1, $2, $3, $4, 'pendiente', $5)
+                    `, [estudiante_id, mes, año, 12480.00, fechaVencimiento]);
+                    
+                    mensualidadesGeneradas++;
+                } else {
+                    mensualidadesExistentes++;
+                }
+            } catch (error) {
+                console.error(`Error generando mensualidad para mes ${mes}:`, error);
+                return res.status(500).json({ 
+                    message: `Error al generar mensualidad para ${mes}/${año}. Detalles: ${error.message}` 
+                });
             }
         }
         
-        res.json({ message: 'Mensualidades generadas correctamente.' });
+        let mensaje = `Mensualidades procesadas para ${estudiante.nombre} - Año ${año}. `;
+        if (mensualidadesGeneradas > 0) {
+            mensaje += `${mensualidadesGeneradas} mensualidades generadas. `;
+        }
+        if (mensualidadesExistentes > 0) {
+            mensaje += `${mensualidadesExistentes} mensualidades ya existían.`;
+        }
+        
+        res.json({ 
+            message: mensaje,
+            generadas: mensualidadesGeneradas,
+            existentes: mensualidadesExistentes
+        });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Error al generar mensualidades.' });
+        console.error('Error general al generar mensualidades:', err);
+        res.status(500).json({ 
+            message: 'Error al generar mensualidades. Detalles: ' + err.message 
+        });
     }
 });
 

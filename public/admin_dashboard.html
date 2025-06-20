@@ -481,24 +481,54 @@
                 return;
             }
 
+            if (!año) {
+                showAlert('Por favor seleccione un año.', 'warning');
+                return;
+            }
+
             if (!confirm(`¿Está seguro de que desea generar las 12 mensualidades para el año ${año}?`)) {
                 return;
             }
 
             try {
+                // Mostrar indicador de carga
+                const btnGenerar = document.querySelector('button[onclick="generarMensualidades()"]');
+                const textoOriginal = btnGenerar.innerHTML;
+                btnGenerar.innerHTML = '<i class="bi bi-hourglass-split"></i> Generando...';
+                btnGenerar.disabled = true;
+
                 const response = await fetch('/api/admin/generar-mensualidades', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ estudiante_id: estudianteId, año: parseInt(año) })
+                    body: JSON.stringify({ estudiante_id: parseInt(estudianteId), año: parseInt(año) })
                 });
 
                 const data = await response.json();
-                if (!response.ok) throw new Error(data.message);
+                
+                if (!response.ok) {
+                    throw new Error(data.message || 'Error desconocido al generar mensualidades');
+                }
 
-                showAlert('Mensualidades generadas correctamente.');
+                // Mostrar mensaje de éxito con detalles
+                let mensaje = data.message;
+                if (data.generadas > 0) {
+                    mensaje += `\n✅ ${data.generadas} mensualidades nuevas generadas.`;
+                }
+                if (data.existentes > 0) {
+                    mensaje += `\n⚠️ ${data.existentes} mensualidades ya existían.`;
+                }
+
+                showAlert(mensaje, 'success');
                 mensualidadEstudiante.value = '';
+                
             } catch (error) {
-                showAlert(error.message, 'danger');
+                console.error('Error al generar mensualidades:', error);
+                showAlert(`Error al generar mensualidades: ${error.message}`, 'danger');
+            } finally {
+                // Restaurar botón
+                const btnGenerar = document.querySelector('button[onclick="generarMensualidades()"]');
+                btnGenerar.innerHTML = '<i class="bi bi-calendar-plus"></i> Generar Mensualidades';
+                btnGenerar.disabled = false;
             }
         }
     </script>
