@@ -39,19 +39,6 @@ const initDB = async () => {
       id_representante INTEGER REFERENCES representantes(id)
     )`);
 
-    // Tabla Pagos (Mensualidades)
-    await pool.query(`CREATE TABLE IF NOT EXISTS pagos (
-      id SERIAL PRIMARY KEY,
-      id_estudiante INTEGER REFERENCES estudiantes(id),
-      monto DECIMAL(10, 2) NOT NULL DEFAULT 12480.00,
-      mes INTEGER NOT NULL CHECK (mes >= 1 AND mes <= 12),
-      año INTEGER NOT NULL,
-      fecha_pago DATE,
-      estado VARCHAR(20) DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'pagado')),
-      fecha_vencimiento DATE NOT NULL,
-      concepto TEXT DEFAULT 'Mensualidad escolar'
-    )`);
-
     // Tabla Notas
     await pool.query(`CREATE TABLE IF NOT EXISTS notas (
       id SERIAL PRIMARY KEY,
@@ -60,6 +47,9 @@ const initDB = async () => {
       calificacion DECIMAL(4, 2) NOT NULL,
       periodo VARCHAR(100) NOT NULL
     )`);
+
+    // Migración de la tabla Pagos
+    await migrarTablaPagos();
 
     // Insertar admin por defecto si no existe
     const adminEmail = 'admin@colegio.com';
@@ -77,6 +67,73 @@ const initDB = async () => {
 
   } catch (err) {
     console.error('Error inicializando la base de datos:', err.stack);
+  }
+};
+
+// Función para migrar la tabla de pagos
+const migrarTablaPagos = async () => {
+  try {
+    // Verificar si la tabla pagos existe
+    const tableExists = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'pagos'
+      );
+    `);
+
+    if (tableExists.rows[0].exists) {
+      // La tabla existe, verificar si tiene las columnas nuevas
+      const columns = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'pagos' 
+        AND table_schema = 'public'
+      `);
+      
+      const columnNames = columns.rows.map(row => row.column_name);
+      
+      // Si no tiene las columnas nuevas, eliminar la tabla y recrearla
+      if (!columnNames.includes('mes') || !columnNames.includes('año')) {
+        console.log('Migrando tabla de pagos...');
+        await pool.query('DROP TABLE IF EXISTS pagos CASCADE');
+        
+        // Crear la nueva tabla con la estructura correcta
+        await pool.query(`CREATE TABLE pagos (
+          id SERIAL PRIMARY KEY,
+          id_estudiante INTEGER REFERENCES estudiantes(id),
+          monto DECIMAL(10, 2) NOT NULL DEFAULT 12480.00,
+          mes INTEGER NOT NULL CHECK (mes >= 1 AND mes <= 12),
+          año INTEGER NOT NULL,
+          fecha_pago DATE,
+          estado VARCHAR(20) DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'pagado')),
+          fecha_vencimiento DATE NOT NULL,
+          concepto TEXT DEFAULT 'Mensualidad escolar'
+        )`);
+        
+        console.log('Tabla de pagos migrada correctamente.');
+      } else {
+        console.log('Tabla de pagos ya tiene la estructura correcta.');
+      }
+    } else {
+      // La tabla no existe, crearla con la estructura correcta
+      await pool.query(`CREATE TABLE pagos (
+        id SERIAL PRIMARY KEY,
+        id_estudiante INTEGER REFERENCES estudiantes(id),
+        monto DECIMAL(10, 2) NOT NULL DEFAULT 12480.00,
+        mes INTEGER NOT NULL CHECK (mes >= 1 AND mes <= 12),
+        año INTEGER NOT NULL,
+        fecha_pago DATE,
+        estado VARCHAR(20) DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'pagado')),
+        fecha_vencimiento DATE NOT NULL,
+        concepto TEXT DEFAULT 'Mensualidad escolar'
+      )`);
+      
+      console.log('Tabla de pagos creada correctamente.');
+    }
+  } catch (err) {
+    console.error('Error migrando tabla de pagos:', err);
+    throw err;
   }
 };
 
