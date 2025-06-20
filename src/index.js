@@ -14,6 +14,7 @@ initDB();
 // Middlewares
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.json());
 app.use(session({
   secret: 'tu_super_secreto_aqui', // Cambia esto por un secreto real
   resave: false,
@@ -64,13 +65,19 @@ app.get('/logout', (req, res) => {
     });
 });
 
-
 // Middleware para proteger rutas
 const auth = (role) => (req, res, next) => {
     if (req.session.user && req.session.user.role === role) {
-        next();
+        return next();
+    }
+    
+    // Si no está autenticado, responder de forma inteligente
+    // Si la petición espera JSON (una API), se envía un error JSON.
+    // Si no, se redirige a la página de login.
+    if (req.accepts('json')) {
+        res.status(403).json({ message: 'Acceso no autorizado. Por favor, inicie sesión de nuevo.' });
     } else {
-        res.status(403).redirect('/login.html');
+        res.redirect('/login.html');
     }
 };
 
