@@ -22,7 +22,7 @@ app.use(session({
 }));
 
 // Rutas de Login
-app.post('/login', (req, res) => {
+app.post('/login', async (req, res) => {
     const { email, password, role } = req.body;
     
     let tableName = '';
@@ -33,23 +33,27 @@ app.post('/login', (req, res) => {
         return res.status(400).send('Rol no válido');
     }
     
-    db.get(`SELECT * FROM ${tableName} WHERE email = ?`, [email], (err, user) => {
-        if (err) return res.status(500).send('Error del servidor');
+    try {
+        const result = await db.query(`SELECT * FROM ${tableName} WHERE email = $1`, [email]);
+        const user = result.rows[0];
+
         if (!user) return res.status(401).send('Credenciales incorrectas');
         
-        bcrypt.compare(password, user.password, (err, result) => {
-            if (result) {
-                req.session.user = { id: user.id, email: user.email, role: role };
-                if (role === 'admin') {
-                    res.redirect('/admin/dashboard');
-                } else {
-                    res.redirect('/representante/dashboard');
-                }
+        const match = await bcrypt.compare(password, user.password);
+        if (match) {
+            req.session.user = { id: user.id, email: user.email, role: role };
+            if (role === 'admin') {
+                res.redirect('/admin/dashboard');
             } else {
-                res.status(401).send('Credenciales incorrectas');
+                res.redirect('/representante/dashboard');
             }
-        });
-    });
+        } else {
+            res.status(401).send('Credenciales incorrectas');
+        }
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Error del servidor');
+    }
 });
 
 // Ruta de Logout

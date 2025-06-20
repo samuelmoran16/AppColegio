@@ -1,81 +1,77 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 
-// Render usa /data para el almacenamiento persistente. Localmente, usa la raíz del proyecto.
-const dbPath = process.env.RENDER ? '/data/colegio.db' : path.join(__dirname, '..', 'colegio.db');
-
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
-    console.error("Error al abrir la base de datos", err.message);
-  } else {
-    console.log("Conectado a la base de datos SQLite en:", dbPath);
+// Conexión a la base de datos PostgreSQL usando la URL de Render.
+// process.env.DATABASE_URL será configurado en el panel de Render.
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
   }
 });
 
 // Crear tablas si no existen
-const initDB = () => {
-  db.serialize(() => {
+const initDB = async () => {
+  try {
     // Tabla Administradores
-    db.run(`CREATE TABLE IF NOT EXISTS administradores (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nombre TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      password TEXT NOT NULL
+    await pool.query(`CREATE TABLE IF NOT EXISTS administradores (
+      id SERIAL PRIMARY KEY,
+      nombre VARCHAR(255) NOT NULL,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      password VARCHAR(255) NOT NULL
+    )`);
+
+    // Tabla Representantes
+    await pool.query(`CREATE TABLE IF NOT EXISTS representantes (
+      id SERIAL PRIMARY KEY,
+      nombre VARCHAR(255) NOT NULL,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      password VARCHAR(255) NOT NULL
+    )`);
+
+    // Tabla Estudiantes
+    await pool.query(`CREATE TABLE IF NOT EXISTS estudiantes (
+      id SERIAL PRIMARY KEY,
+      nombre VARCHAR(255) NOT NULL,
+      fecha_nacimiento DATE,
+      id_representante INTEGER REFERENCES representantes(id)
+    )`);
+
+    // Tabla Pagos
+    await pool.query(`CREATE TABLE IF NOT EXISTS pagos (
+      id SERIAL PRIMARY KEY,
+      id_estudiante INTEGER REFERENCES estudiantes(id),
+      monto DECIMAL(10, 2) NOT NULL,
+      fecha DATE NOT NULL,
+      concepto TEXT
+    )`);
+
+    // Tabla Notas
+    await pool.query(`CREATE TABLE IF NOT EXISTS notas (
+      id SERIAL PRIMARY KEY,
+      id_estudiante INTEGER REFERENCES estudiantes(id),
+      materia VARCHAR(255) NOT NULL,
+      calificacion DECIMAL(4, 2) NOT NULL,
+      periodo VARCHAR(100) NOT NULL
     )`);
 
     // Insertar admin por defecto si no existe
     const adminEmail = 'admin@colegio.com';
-    db.get('SELECT * FROM administradores WHERE email = ?', [adminEmail], (err, row) => {
-      if (err) {
-        console.error("Error al buscar administrador:", err.message);
-        return;
-      }
-      if (!row) {
-        bcrypt.hash('admin123', 10, (err, hash) => {
-          if (err) {
-            console.error("Error al encriptar contraseña:", err);
-            return;
-          }
-          db.run('INSERT INTO administradores (nombre, email, password) VALUES (?, ?, ?)', ['Administrador', adminEmail, hash]);
-          console.log('Usuario administrador por defecto creado.');
-        });
-      }
-    });
+    const res = await pool.query('SELECT * FROM administradores WHERE email = $1', [adminEmail]);
+    if (res.rowCount === 0) {
+      const hash = await bcrypt.hash('admin123', 10);
+      await pool.query(
+        'INSERT INTO administradores (nombre, email, password) VALUES ($1, $2, $3)',
+        ['Administrador', adminEmail, hash]
+      );
+      console.log('Usuario administrador por defecto creado.');
+    }
+    
+    console.log('Base de datos inicializada correctamente.');
 
-    db.run(`CREATE TABLE IF NOT EXISTS representantes (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nombre TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      password TEXT NOT NULL
-    )`);
-
-    db.run(`CREATE TABLE IF NOT EXISTS estudiantes (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nombre TEXT NOT NULL,
-      fecha_nacimiento TEXT,
-      id_representante INTEGER,
-      FOREIGN KEY(id_representante) REFERENCES representantes(id)
-    )`);
-
-    db.run(`CREATE TABLE IF NOT EXISTS pagos (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      id_estudiante INTEGER,
-      monto REAL NOT NULL,
-      fecha TEXT NOT NULL,
-      concepto TEXT,
-      FOREIGN KEY(id_estudiante) REFERENCES estudiantes(id)
-    )`);
-
-    db.run(`CREATE TABLE IF NOT EXISTS notas (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      id_estudiante INTEGER,
-      materia TEXT NOT NULL,
-      calificacion REAL NOT NULL,
-      periodo TEXT NOT NULL,
-      FOREIGN KEY(id_estudiante) REFERENCES estudiantes(id)
-    )`);
-  });
+  } catch (err) {
+    console.error('Error inicializando la base de datos:', err.stack);
+  }
 };
 
-module.exports = { db, initDB }; 
+module.exports = { db: pool, initDB }; 
