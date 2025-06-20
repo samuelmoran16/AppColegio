@@ -563,23 +563,28 @@ app.post('/api/representante/pagos', auth('representante'), async (req, res) => 
             return res.status(403).json({ message: 'No tiene permiso para realizar pagos para este estudiante.' });
         }
 
-        // Verificar si ya existe un pago para ese mes/año
-        const pagoExistente = await db.query('SELECT id FROM pagos WHERE id_estudiante = $1 AND mes = $2 AND año = $3', [estudiante_id, mes, año]);
-        if (pagoExistente.rows.length > 0) {
-            return res.status(409).json({ message: 'Ya existe un pago registrado para este mes y año.' });
+        // Verificar si ya existe un pago para ese mes/año y su estado
+        const pagoExistente = await db.query('SELECT id, estado FROM pagos WHERE id_estudiante = $1 AND mes = $2 AND año = $3', [estudiante_id, mes, año]);
+        
+        if (pagoExistente.rows.length === 0) {
+            return res.status(404).json({ message: 'No se encontró una mensualidad pendiente para este mes. El administrador debe generar las mensualidades primero.' });
         }
 
-        // Calcular fecha de vencimiento (último día del mes)
-        const fechaVencimiento = new Date(año, mes, 0);
+        const pago = pagoExistente.rows[0];
+        
+        if (pago.estado === 'pagado') {
+            return res.status(409).json({ message: 'Esta mensualidad ya fue pagada anteriormente.' });
+        }
 
-        // Registrar el pago como pagado
+        // Actualizar el pago existente como pagado
         const result = await db.query(`
-            INSERT INTO pagos (id_estudiante, mes, año, monto, estado, fecha_pago, fecha_vencimiento)
-            VALUES ($1, $2, $3, $4, 'pagado', CURRENT_DATE, $5)
+            UPDATE pagos 
+            SET estado = 'pagado', fecha_pago = CURRENT_DATE
+            WHERE id = $1
             RETURNING *
-        `, [estudiante_id, mes, año, 12480.00, fechaVencimiento]);
+        `, [pago.id]);
 
-        const pago = result.rows[0];
+        const pagoActualizado = result.rows[0];
 
         // Obtener datos del estudiante y representante para la factura
         const estudianteResult = await db.query('SELECT * FROM estudiantes WHERE id = $1', [estudiante_id]);
@@ -589,10 +594,10 @@ app.post('/api/representante/pagos', auth('representante'), async (req, res) => 
         const representante = representanteResult.rows[0];
 
         // Generar factura PDF
-        const facturaFilename = await generarFacturaPDF(pago, estudiante, representante);
+        const facturaFilename = await generarFacturaPDF(pagoActualizado, estudiante, representante);
 
-        res.status(201).json({
-            ...pago,
+        res.status(200).json({
+            ...pagoActualizado,
             factura_url: `/facturas/${facturaFilename}`
         });
     } catch (err) {
