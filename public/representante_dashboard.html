@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Panel de Representante</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
@@ -18,10 +19,61 @@
             </div>
         </div>
     </nav>
+    
     <div class="container mt-4">
-        <h2>Mis Hijos</h2>
-        <div id="hijos-container" class="row">
-            <!-- Las tarjetas de los hijos se insertarán aquí -->
+        <div id="alert-container"></div>
+        
+        <!-- Accordion para organizar las secciones -->
+        <div class="accordion" id="representanteAccordion">
+            
+            <!-- Sección: Mis Hijos -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingHijos">
+                    <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseHijos" aria-expanded="true" aria-controls="collapseHijos">
+                        <i class="bi bi-people me-2"></i> Mis Hijos
+                    </button>
+                </h2>
+                <div id="collapseHijos" class="accordion-collapse collapse show" aria-labelledby="headingHijos" data-bs-parent="#representanteAccordion">
+                    <div class="accordion-body">
+                        <div id="hijos-container" class="row">
+                            <!-- Las tarjetas de los hijos se insertarán aquí -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sección: Pagos de Mensualidad -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingPagos">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapsePagos" aria-expanded="false" aria-controls="collapsePagos">
+                        <i class="bi bi-credit-card me-2"></i> Pagos de Mensualidad
+                    </button>
+                </h2>
+                <div id="collapsePagos" class="accordion-collapse collapse" aria-labelledby="headingPagos" data-bs-parent="#representanteAccordion">
+                    <div class="accordion-body">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="select-estudiante" class="form-label">Seleccionar Hijo:</label>
+                                <select class="form-select" id="select-estudiante">
+                                    <option value="">Cargando estudiantes...</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="select-año" class="form-label">Año:</label>
+                                <select class="form-select" id="select-año">
+                                    <option value="2024">2024</option>
+                                    <option value="2025">2025</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div id="pagos-container">
+                            <!-- Los pagos se mostrarán aquí -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -55,9 +107,157 @@
     <script>
         const nombreRepresentanteEl = document.getElementById('nombre-representante');
         const hijosContainer = document.getElementById('hijos-container');
+        const selectEstudiante = document.getElementById('select-estudiante');
+        const selectAño = document.getElementById('select-año');
+        const pagosContainer = document.getElementById('pagos-container');
+        const alertContainer = document.getElementById('alert-container');
         const notasModal = new bootstrap.Modal(document.getElementById('notasModal'));
         const notasModalLabel = document.getElementById('notasModalLabel');
         const notasTbody = document.getElementById('notas-tbody');
+
+        let estudiantes = [];
+
+        // Función para mostrar alertas
+        function showAlert(message, type = 'success') {
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = [
+                `<div class="alert alert-${type} alert-dismissible" role="alert">`,
+                `   <div>${message}</div>`,
+                '   <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>',
+                '</div>'
+            ].join('');
+            alertContainer.append(wrapper);
+        }
+
+        // Función para obtener el nombre del mes
+        function getNombreMes(mes) {
+            const meses = [
+                'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+            ];
+            return meses[mes - 1];
+        }
+
+        // Función para formatear fecha
+        function formatearFecha(fecha) {
+            if (!fecha) return 'N/A';
+            return new Date(fecha).toLocaleDateString('es-ES');
+        }
+
+        // Función para cargar pagos
+        async function cargarPagos() {
+            const estudianteId = selectEstudiante.value;
+            const año = selectAño.value;
+
+            if (!estudianteId) {
+                pagosContainer.innerHTML = '<p class="text-muted">Seleccione un estudiante para ver sus pagos.</p>';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/representante/pagos');
+                if (!response.ok) throw new Error('Error al cargar los pagos');
+                
+                const estudiantesData = await response.json();
+                const estudiante = estudiantesData.find(e => e.id == estudianteId);
+                
+                if (!estudiante) {
+                    pagosContainer.innerHTML = '<p class="text-danger">No se encontró información del estudiante.</p>';
+                    return;
+                }
+
+                // Generar tabla de pagos para el año seleccionado
+                let html = `
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">Mensualidades de ${estudiante.nombre} - ${año}</h5>
+                            <small class="text-muted">Costo por mensualidad: Bs. 12,480.00</small>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Mes</th>
+                                            <th>Monto</th>
+                                            <th>Estado</th>
+                                            <th>Fecha de Pago</th>
+                                            <th>Vencimiento</th>
+                                            <th>Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                `;
+
+                // Generar filas para cada mes
+                for (let mes = 1; mes <= 12; mes++) {
+                    const pago = estudiante.pagos.find(p => p.mes === mes && p.año == año);
+                    const estado = pago ? pago.estado : 'pendiente';
+                    const fechaPago = pago ? formatearFecha(pago.fecha_pago) : '-';
+                    const fechaVencimiento = pago ? formatearFecha(pago.fecha_vencimiento) : formatearFecha(new Date(año, mes, 0));
+                    
+                    const estadoClass = estado === 'pagado' ? 'success' : 'warning';
+                    const estadoText = estado === 'pagado' ? 'Pagado' : 'Pendiente';
+                    
+                    html += `
+                        <tr>
+                            <td><strong>${getNombreMes(mes)}</strong></td>
+                            <td>Bs. 12,480.00</td>
+                            <td><span class="badge bg-${estadoClass}">${estadoText}</span></td>
+                            <td>${fechaPago}</td>
+                            <td>${fechaVencimiento}</td>
+                            <td>
+                    `;
+                    
+                    if (estado === 'pendiente') {
+                        html += `<button class="btn btn-success btn-sm" onclick="realizarPago(${estudiante.id}, ${mes}, ${año})">Pagar</button>`;
+                    } else {
+                        html += `<span class="text-success"><i class="bi bi-check-circle"></i> Completado</span>`;
+                    }
+                    
+                    html += `
+                            </td>
+                        </tr>
+                    `;
+                }
+
+                html += `
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                pagosContainer.innerHTML = html;
+
+            } catch (error) {
+                pagosContainer.innerHTML = `<p class="text-danger">${error.message}</p>`;
+            }
+        }
+
+        // Función para realizar un pago
+        async function realizarPago(estudianteId, mes, año) {
+            if (!confirm(`¿Está seguro de que desea realizar el pago de ${getNombreMes(mes)} ${año}?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/representante/pagos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ estudiante_id: estudianteId, mes, año })
+                });
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.message);
+
+                showAlert(`Pago de ${getNombreMes(mes)} ${año} realizado con éxito.`);
+                cargarPagos(); // Recargar la tabla
+            } catch (error) {
+                showAlert(error.message, 'danger');
+            }
+        }
 
         async function verNotas(estudianteId, estudianteNombre) {
             notasModalLabel.textContent = `Notas de ${estudianteNombre}`;
@@ -89,6 +289,10 @@
             }
         }
 
+        // Event listeners
+        selectEstudiante.addEventListener('change', cargarPagos);
+        selectAño.addEventListener('change', cargarPagos);
+
         document.addEventListener('DOMContentLoaded', async () => {
             try {
                 const response = await fetch('/api/representante/dashboard');
@@ -97,8 +301,18 @@
                 if (!response.ok) throw new Error('No se pudieron cargar los datos.');
                 
                 const { representante, hijos } = data;
+                estudiantes = hijos;
                 
                 nombreRepresentanteEl.textContent = `Bienvenido, ${representante.nombre}`;
+
+                // Llenar el select de estudiantes
+                selectEstudiante.innerHTML = '<option value="">Seleccione un estudiante</option>';
+                estudiantes.forEach(estudiante => {
+                    const option = document.createElement('option');
+                    option.value = estudiante.id;
+                    option.textContent = `${estudiante.nombre} - ${estudiante.grado}`;
+                    selectEstudiante.appendChild(option);
+                });
 
                 if (hijos.length === 0) {
                     hijosContainer.innerHTML = '<p>No tiene estudiantes registrados a su nombre.</p>';

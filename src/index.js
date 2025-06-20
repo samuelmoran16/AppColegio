@@ -326,6 +326,128 @@ app.get('/api/estudiante/:id/notas', auth('representante'), async (req, res) => 
     }
 });
 
+// --- API para Pagos de Mensualidad ---
+
+// Obtener pagos de mensualidad de los hijos del representante
+app.get('/api/representante/pagos', auth('representante'), async (req, res) => {
+    try {
+        const id_representante = req.session.user.id;
+        
+        // Obtener todos los hijos del representante con sus pagos
+        const result = await db.query(`
+            SELECT 
+                e.id as estudiante_id,
+                e.nombre as estudiante_nombre,
+                e.cedula as estudiante_cedula,
+                e.grado,
+                p.id as pago_id,
+                p.mes,
+                p.año,
+                p.monto,
+                p.estado,
+                p.fecha_pago,
+                p.fecha_vencimiento,
+                p.concepto
+            FROM estudiantes e
+            LEFT JOIN pagos p ON e.id = p.id_estudiante
+            WHERE e.id_representante = $1
+            ORDER BY e.nombre, p.año DESC, p.mes DESC
+        `, [id_representante]);
+
+        // Organizar los datos por estudiante
+        const estudiantes = {};
+        result.rows.forEach(row => {
+            if (!estudiantes[row.estudiante_id]) {
+                estudiantes[row.estudiante_id] = {
+                    id: row.estudiante_id,
+                    nombre: row.estudiante_nombre,
+                    cedula: row.estudiante_cedula,
+                    grado: row.grado,
+                    pagos: []
+                };
+            }
+            
+            if (row.pago_id) {
+                estudiantes[row.estudiante_id].pagos.push({
+                    id: row.pago_id,
+                    mes: row.mes,
+                    año: row.año,
+                    monto: row.monto,
+                    estado: row.estado,
+                    fecha_pago: row.fecha_pago,
+                    fecha_vencimiento: row.fecha_vencimiento,
+                    concepto: row.concepto
+                });
+            }
+        });
+
+        res.json(Object.values(estudiantes));
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al obtener los pagos.' });
+    }
+});
+
+// Registrar un pago de mensualidad
+app.post('/api/representante/pagos', auth('representante'), async (req, res) => {
+    try {
+        const { estudiante_id, mes, año } = req.body;
+        const id_representante = req.session.user.id;
+
+        // Verificar que el estudiante pertenece al representante
+        const verificacion = await db.query('SELECT id FROM estudiantes WHERE id = $1 AND id_representante = $2', [estudiante_id, id_representante]);
+        if (verificacion.rows.length === 0) {
+            return res.status(403).json({ message: 'No tiene permiso para realizar pagos para este estudiante.' });
+        }
+
+        // Verificar si ya existe un pago para ese mes/año
+        const pagoExistente = await db.query('SELECT id FROM pagos WHERE id_estudiante = $1 AND mes = $2 AND año = $3', [estudiante_id, mes, año]);
+        if (pagoExistente.rows.length > 0) {
+            return res.status(409).json({ message: 'Ya existe un pago registrado para este mes y año.' });
+        }
+
+        // Calcular fecha de vencimiento (último día del mes)
+        const fechaVencimiento = new Date(año, mes, 0); // El día 0 del mes siguiente es el último día del mes actual
+
+        // Registrar el pago como pagado
+        const result = await db.query(`
+            INSERT INTO pagos (id_estudiante, mes, año, monto, estado, fecha_pago, fecha_vencimiento)
+            VALUES ($1, $2, $3, $4, 'pagado', CURRENT_DATE, $5)
+            RETURNING *
+        `, [estudiante_id, mes, año, 12480.00, fechaVencimiento]);
+
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al registrar el pago.' });
+    }
+});
+
+// Generar mensualidades pendientes para un estudiante (función auxiliar)
+app.post('/api/admin/generar-mensualidades', auth('admin'), async (req, res) => {
+    try {
+        const { estudiante_id, año } = req.body;
+        
+        // Generar mensualidades para todo el año
+        for (let mes = 1; mes <= 12; mes++) {
+            // Verificar si ya existe
+            const existe = await db.query('SELECT id FROM pagos WHERE id_estudiante = $1 AND mes = $2 AND año = $3', [estudiante_id, mes, año]);
+            if (existe.rows.length === 0) {
+                const fechaVencimiento = new Date(año, mes, 0);
+                await db.query(`
+                    INSERT INTO pagos (id_estudiante, mes, año, monto, estado, fecha_vencimiento)
+                    VALUES ($1, $2, $3, $4, 'pendiente', $5)
+                `, [estudiante_id, mes, año, 12480.00, fechaVencimiento]);
+            }
+        }
+        
+        res.json({ message: 'Mensualidades generadas correctamente.' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al generar mensualidades.' });
+    }
+});
+
 // --- Rutas para la gestión de Notas por parte del Admin ---
 
 // Obtener todas las notas de un estudiante (versión admin)

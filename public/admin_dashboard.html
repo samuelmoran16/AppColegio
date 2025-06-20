@@ -218,6 +218,42 @@
                 </div>
             </div>
 
+            <!-- Sección: Generar Mensualidades -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingMensualidades">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseMensualidades" aria-expanded="false" aria-controls="collapseMensualidades">
+                        <i class="bi bi-calendar-check me-2"></i> Generar Mensualidades
+                    </button>
+                </h2>
+                <div id="collapseMensualidades" class="accordion-collapse collapse" aria-labelledby="headingMensualidades" data-bs-parent="#adminAccordion">
+                    <div class="accordion-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="mensualidad-estudiante" class="form-label">Seleccionar Estudiante:</label>
+                                    <select class="form-select" id="mensualidad-estudiante">
+                                        <option value="">Cargando estudiantes...</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="mensualidad-año" class="form-label">Año:</label>
+                                    <select class="form-select" id="mensualidad-año">
+                                        <option value="2024">2024</option>
+                                        <option value="2025">2025</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-warning" onclick="generarMensualidades()">
+                            <i class="bi bi-calendar-plus"></i> Generar Mensualidades
+                        </button>
+                        <small class="text-muted d-block mt-2">Esto generará 12 mensualidades pendientes para el estudiante seleccionado.</small>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -229,6 +265,7 @@
         const listaRepresentantes = document.getElementById('lista-representantes');
         const listaEstudiantes = document.getElementById('lista-estudiantes');
         const alertContainer = document.getElementById('alert-container');
+        const mensualidadEstudiante = document.getElementById('mensualidad-estudiante');
 
         // Función para mostrar alertas
         function showAlert(message, type = 'success') {
@@ -249,10 +286,13 @@
                 const estudiantes = await response.json();
 
                 listaEstudiantes.innerHTML = '';
+                mensualidadEstudiante.innerHTML = '<option value="">Seleccione un estudiante</option>';
+                
                 if (estudiantes.length === 0) {
                     listaEstudiantes.innerHTML = '<li class="list-group-item">No hay estudiantes registrados.</li>';
                 } else {
                     estudiantes.forEach(est => {
+                        // Llenar la lista de estudiantes
                         const li = document.createElement('li');
                         li.className = 'list-group-item d-flex justify-content-between align-items-center';
                         li.innerHTML = `
@@ -266,6 +306,12 @@
                             </div>
                         `;
                         listaEstudiantes.appendChild(li);
+
+                        // Llenar el select de mensualidades
+                        const option = document.createElement('option');
+                        option.value = est.id;
+                        option.textContent = `${est.nombre} - ${est.grado}`;
+                        mensualidadEstudiante.appendChild(option);
                     });
                 }
             } catch (error) {
@@ -424,6 +470,37 @@
             cargarRepresentantes();
             cargarEstudiantes();
         });
+
+        // Función para generar mensualidades
+        async function generarMensualidades() {
+            const estudianteId = mensualidadEstudiante.value;
+            const año = document.getElementById('mensualidad-año').value;
+
+            if (!estudianteId) {
+                showAlert('Por favor seleccione un estudiante.', 'warning');
+                return;
+            }
+
+            if (!confirm(`¿Está seguro de que desea generar las 12 mensualidades para el año ${año}?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/admin/generar-mensualidades', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ estudiante_id: estudianteId, año: parseInt(año) })
+                });
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.message);
+
+                showAlert('Mensualidades generadas correctamente.');
+                mensualidadEstudiante.value = '';
+            } catch (error) {
+                showAlert(error.message, 'danger');
+            }
+        }
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 

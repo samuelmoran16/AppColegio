@@ -39,13 +39,17 @@ const initDB = async () => {
       id_representante INTEGER REFERENCES representantes(id)
     )`);
 
-    // Tabla Pagos
+    // Tabla Pagos (Mensualidades)
     await pool.query(`CREATE TABLE IF NOT EXISTS pagos (
       id SERIAL PRIMARY KEY,
       id_estudiante INTEGER REFERENCES estudiantes(id),
-      monto DECIMAL(10, 2) NOT NULL,
-      fecha DATE NOT NULL,
-      concepto TEXT
+      monto DECIMAL(10, 2) NOT NULL DEFAULT 12480.00,
+      mes INTEGER NOT NULL CHECK (mes >= 1 AND mes <= 12),
+      año INTEGER NOT NULL,
+      fecha_pago DATE,
+      estado VARCHAR(20) DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'pagado')),
+      fecha_vencimiento DATE NOT NULL,
+      concepto TEXT DEFAULT 'Mensualidad escolar'
     )`);
 
     // Tabla Notas
