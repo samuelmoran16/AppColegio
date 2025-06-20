@@ -146,6 +146,127 @@ app.post('/api/estudiantes', auth('admin'), async (req, res) => {
     }
 });
 
+// Eliminar un estudiante
+app.delete('/api/estudiantes/:id', auth('admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        // Primero, eliminar las notas asociadas para evitar errores de foreign key
+        await db.query('DELETE FROM notas WHERE id_estudiante = $1', [id]);
+        // Luego, eliminar al estudiante
+        const result = await db.query('DELETE FROM estudiantes WHERE id = $1', [id]);
+        
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Estudiante no encontrado.' });
+        }
+        res.status(200).json({ message: 'Estudiante eliminado con éxito.' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al eliminar el estudiante.' });
+    }
+});
+
+// Eliminar un representante
+app.delete('/api/representantes/:id', auth('admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        // Verificar si el representante tiene estudiantes a su cargo
+        const estudiantes = await db.query('SELECT id FROM estudiantes WHERE id_representante = $1', [id]);
+        if (estudiantes.rows.length > 0) {
+            return res.status(400).json({ message: 'No se puede eliminar. El representante tiene estudiantes asignados.' });
+        }
+        
+        const result = await db.query('DELETE FROM representantes WHERE id = $1', [id]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Representante no encontrado.' });
+        }
+        res.status(200).json({ message: 'Representante eliminado con éxito.' });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al eliminar el representante.' });
+    }
+});
+
+// Obtener un representante por ID
+app.get('/api/representantes/:id', auth('admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await db.query('SELECT id, nombre, email FROM representantes WHERE id = $1', [id]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'Representante no encontrado.' });
+        }
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al obtener el representante.' });
+    }
+});
+
+// Actualizar un representante
+app.put('/api/representantes/:id', auth('admin'), async (req, res) => {
+    const { id } = req.params;
+    const { nombre, email } = req.body;
+    if (!nombre || !email) {
+        return res.status(400).json({ message: 'Nombre y email son obligatorios.' });
+    }
+    try {
+        const result = await db.query(
+            'UPDATE representantes SET nombre = $1, email = $2 WHERE id = $3 RETURNING id, nombre, email',
+            [nombre, email, id]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Representante no encontrado.' });
+        }
+        res.status(200).json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        if (err.code === '23505') {
+            return res.status(409).json({ message: 'El correo electrónico ya está en uso por otro representante.' });
+        }
+        res.status(500).json({ message: 'Error al actualizar el representante.' });
+    }
+});
+
+// Obtener un estudiante por ID
+app.get('/api/estudiantes/:id', auth('admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await db.query('SELECT * FROM estudiantes WHERE id = $1', [id]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'Estudiante no encontrado.' });
+        }
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al obtener el estudiante.' });
+    }
+});
+
+// Actualizar un estudiante
+app.put('/api/estudiantes/:id', auth('admin'), async (req, res) => {
+    const { id } = req.params;
+    const { nombre, cedula, fecha_nacimiento, grado, id_representante } = req.body;
+    if (!nombre || !cedula || !grado || !id_representante) {
+        return res.status(400).json({ message: 'Todos los campos son obligatorios.' });
+    }
+    try {
+        const result = await db.query(
+            'UPDATE estudiantes SET nombre = $1, cedula = $2, fecha_nacimiento = $3, grado = $4, id_representante = $5 WHERE id = $6 RETURNING *',
+            [nombre, cedula, fecha_nacimiento || null, grado, id_representante, id]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Estudiante no encontrado.' });
+        }
+        res.status(200).json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        if (err.code === '23505') {
+            return res.status(409).json({ message: 'La cédula ya está en uso por otro estudiante.' });
+        }
+        res.status(500).json({ message: 'Error al actualizar el estudiante.' });
+    }
+});
+
 // Obtener todos los estudiantes
 app.get('/api/estudiantes', auth('admin'), async (req, res) => {
     try {

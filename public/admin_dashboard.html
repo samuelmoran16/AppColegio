@@ -61,6 +61,10 @@
                                 <input type="text" class="form-control" id="est-cedula" required>
                             </div>
                             <div class="mb-3">
+                                <label for="est-fecha-nacimiento" class="form-label">Fecha de Nacimiento</label>
+                                <input type="date" class="form-control" id="est-fecha-nacimiento">
+                            </div>
+                            <div class="mb-3">
                                 <label for="est-grado" class="form-label">Grado</label>
                                 <select class="form-select" id="est-grado" required>
                                     <option value="">Seleccione un grado</option>
@@ -152,9 +156,32 @@
         <div class="row mt-2">
             <div class="col-12">
                 <h3>Representantes Registrados</h3>
-                <ul class="list-group" id="lista-representantes">
-                    <!-- La lista se llenará dinámicamente -->
-                </ul>
+                <div class="card">
+                    <ul class="list-group list-group-flush" id="lista-representantes">
+                        <!-- La lista se llenará dinámicamente -->
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Editar -->
+    <div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editModalLabel">Editar</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="form-edit">
+                        <!-- Los campos del formulario se generarán aquí dinámicamente -->
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="guardarCambios()">Guardar Cambios</button>
+                </div>
             </div>
         </div>
     </div>
@@ -167,6 +194,9 @@
         const listaRepresentantes = document.getElementById('lista-representantes');
         const listaEstudiantes = document.getElementById('lista-estudiantes');
         const alertContainer = document.getElementById('alert-container');
+        const editModal = new bootstrap.Modal(document.getElementById('editModal'));
+        const editModalLabel = document.getElementById('editModalLabel');
+        const editForm = document.getElementById('form-edit');
 
         // Función para mostrar alertas
         function showAlert(message, type = 'success') {
@@ -192,8 +222,16 @@
                 } else {
                     estudiantes.forEach(est => {
                         const li = document.createElement('li');
-                        li.className = 'list-group-item';
-                        li.textContent = `${est.nombre} (C.I: ${est.cedula}) - ${est.grado} - Rep: ${est.nombre_representante}`;
+                        li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                        li.innerHTML = `
+                            <span>
+                                ${est.nombre} (C.I: ${est.cedula}) - ${est.grado} - Rep: ${est.nombre_representante}
+                            </span>
+                            <div>
+                                <button class="btn btn-sm btn-warning me-2" onclick="editarEstudiante(${est.id})">Editar</button>
+                                <button class="btn btn-sm btn-danger" onclick="eliminarEstudiante(${est.id}, '${est.nombre}')">Eliminar</button>
+                            </div>
+                        `;
                         listaEstudiantes.appendChild(li);
                     });
                 }
@@ -212,19 +250,29 @@
                 selectRepresentante.innerHTML = '<option value="">Seleccione un representante</option>';
                 listaRepresentantes.innerHTML = '';
                 
-                representantes.forEach(rep => {
-                    // Llenar el dropdown
-                    const option = document.createElement('option');
-                    option.value = rep.id;
-                    option.textContent = rep.nombre;
-                    selectRepresentante.appendChild(option);
+                if (representantes.length === 0) {
+                    listaRepresentantes.innerHTML = '<li class="list-group-item">No hay representantes registrados.</li>';
+                } else {
+                    representantes.forEach(rep => {
+                        // Llenar el dropdown
+                        const option = document.createElement('option');
+                        option.value = rep.id;
+                        option.textContent = rep.nombre;
+                        selectRepresentante.appendChild(option);
 
-                    // Llenar la lista
-                    const li = document.createElement('li');
-                    li.className = 'list-group-item';
-                    li.textContent = `${rep.nombre} (${rep.email})`;
-                    listaRepresentantes.appendChild(li);
-                });
+                        // Llenar la lista
+                        const li = document.createElement('li');
+                        li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                        li.innerHTML = `
+                            <span>${rep.nombre} (${rep.email})</span>
+                            <div>
+                                <button class="btn btn-sm btn-warning me-2" onclick="editarRepresentante(${rep.id})">Editar</button>
+                                <button class="btn btn-sm btn-danger" onclick="eliminarRepresentante(${rep.id}, '${rep.nombre}')">Eliminar</button>
+                            </div>
+                        `;
+                        listaRepresentantes.appendChild(li);
+                    });
+                }
             } catch (error) {
                 showAlert(error.message, 'danger');
             }
@@ -262,6 +310,7 @@
             const body = {
                 nombre: document.getElementById('est-nombre').value,
                 cedula: document.getElementById('est-cedula').value,
+                fecha_nacimiento: document.getElementById('est-fecha-nacimiento').value,
                 grado: document.getElementById('est-grado').value,
                 id_representante: document.getElementById('est-representante').value
             };
@@ -314,6 +363,157 @@
             cargarRepresentantes();
             cargarEstudiantes();
         });
+
+        // --- Funciones de Eliminación ---
+
+        async function eliminarEstudiante(id, nombre) {
+            if (!confirm(`¿Estás seguro de que deseas eliminar al estudiante "${nombre}"? Esta acción no se puede deshacer.`)) {
+                return;
+            }
+            try {
+                const response = await fetch(`/api/estudiantes/${id}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.message);
+                showAlert('Estudiante eliminado con éxito.');
+                cargarEstudiantes();
+            } catch (error) {
+                showAlert(error.message, 'danger');
+            }
+        }
+
+        async function eliminarRepresentante(id, nombre) {
+            if (!confirm(`¿Estás seguro de que deseas eliminar al representante "${nombre}"?`)) {
+                return;
+            }
+            try {
+                const response = await fetch(`/api/representantes/${id}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.message);
+                showAlert('Representante eliminado con éxito.');
+                cargarRepresentantes();
+                cargarEstudiantes(); // Recargar por si afectó a la lista de estudiantes
+            } catch (error) {
+                showAlert(error.message, 'danger');
+            }
+        }
+
+        // --- Funciones de Edición ---
+        let currentEditing = null; // Guardará el tipo y el ID de lo que se esté editando
+
+        async function editarEstudiante(id) {
+            try {
+                const response = await fetch(`/api/estudiantes/${id}`);
+                const est = await response.json();
+                if (!response.ok) throw new Error(est.message);
+
+                currentEditing = { type: 'estudiante', id: est.id };
+                editModalLabel.textContent = `Editar Estudiante: ${est.nombre}`;
+                
+                // Generar campos para el formulario de estudiante
+                editForm.innerHTML = `
+                    <div class="mb-3">
+                        <label for="edit-nombre" class="form-label">Nombre</label>
+                        <input type="text" class="form-control" id="edit-nombre" value="${est.nombre}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-cedula" class="form-label">Cédula</label>
+                        <input type="text" class="form-control" id="edit-cedula" value="${est.cedula}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-fecha-nacimiento" class="form-label">Fecha de Nacimiento</label>
+                        <input type="date" class="form-control" id="edit-fecha-nacimiento" value="${est.fecha_nacimiento ? est.fecha_nacimiento.split('T')[0] : ''}">
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-grado" class="form-label">Grado</label>
+                        <select class="form-select" id="edit-grado" required>${document.getElementById('est-grado').innerHTML}</select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-representante" class="form-label">Representante</label>
+                        <select class="form-select" id="edit-representante" required>${document.getElementById('est-representante').innerHTML}</select>
+                    </div>
+                `;
+                // Seleccionar los valores correctos en los dropdowns
+                document.getElementById('edit-grado').value = est.grado;
+                document.getElementById('edit-representante').value = est.id_representante;
+
+                editModal.show();
+            } catch(error) {
+                showAlert(error.message, 'danger');
+            }
+        }
+
+        async function editarRepresentante(id) {
+            try {
+                const response = await fetch(`/api/representantes/${id}`);
+                const rep = await response.json();
+                if (!response.ok) throw new Error(rep.message);
+                
+                currentEditing = { type: 'representante', id: rep.id };
+                editModalLabel.textContent = `Editar Representante: ${rep.nombre}`;
+
+                // Generar campos para el formulario de representante
+                editForm.innerHTML = `
+                    <div class="mb-3">
+                        <label for="edit-nombre" class="form-label">Nombre</label>
+                        <input type="text" class="form-control" id="edit-nombre" value="${rep.nombre}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="edit-email" value="${rep.email}" required>
+                    </div>
+                    <p class="form-text">La contraseña no se puede editar desde aquí por seguridad.</p>
+                `;
+                editModal.show();
+            } catch(error) {
+                showAlert(error.message, 'danger');
+            }
+        }
+
+        async function guardarCambios() {
+            if (!currentEditing) return;
+
+            const { type, id } = currentEditing;
+            let url = '';
+            let body = {};
+
+            if (type === 'estudiante') {
+                url = `/api/estudiantes/${id}`;
+                body = {
+                    nombre: document.getElementById('edit-nombre').value,
+                    cedula: document.getElementById('edit-cedula').value,
+                    fecha_nacimiento: document.getElementById('edit-fecha-nacimiento').value,
+                    grado: document.getElementById('edit-grado').value,
+                    id_representante: document.getElementById('edit-representante').value,
+                };
+            } else if (type === 'representante') {
+                url = `/api/representantes/${id}`;
+                body = {
+                    nombre: document.getElementById('edit-nombre').value,
+                    email: document.getElementById('edit-email').value,
+                };
+            }
+
+            try {
+                const response = await fetch(url, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.message);
+
+                editModal.hide();
+                showAlert('Datos actualizados con éxito.');
+                await cargarRepresentantes();
+                await cargarEstudiantes();
+            } catch (error) {
+                // Mostrar el error dentro del modal por ahora
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'alert alert-danger mt-3';
+                errorDiv.textContent = error.message;
+                editForm.appendChild(errorDiv);
+            }
+        }
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
