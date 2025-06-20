@@ -144,6 +144,55 @@ app.post('/api/estudiantes', auth('admin'), async (req, res) => {
     }
 });
 
+// --- API para Representantes ---
+
+// Obtener datos del representante logueado y sus hijos
+app.get('/api/representante/dashboard', auth('representante'), async (req, res) => {
+    try {
+        const id_representante = req.session.user.id;
+        
+        // Obtener datos del representante
+        const repResult = await db.query('SELECT nombre, email FROM representantes WHERE id = $1', [id_representante]);
+        
+        // Obtener la lista de hijos
+        const hijosResult = await db.query('SELECT id, nombre, fecha_nacimiento FROM estudiantes WHERE id_representante = $1 ORDER BY nombre', [id_representante]);
+
+        if (repResult.rows.length === 0) {
+            return res.status(404).json({ message: 'Representante no encontrado.' });
+        }
+
+        res.json({
+            representante: repResult.rows[0],
+            hijos: hijosResult.rows
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Error al obtener los datos del dashboard.');
+    }
+});
+
+// Obtener notas de un estudiante específico
+app.get('/api/estudiante/:id/notas', auth('representante'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const id_representante = req.session.user.id;
+
+        // Verificar que el representante solo pueda ver las notas de sus propios hijos
+        const verificacion = await db.query('SELECT id FROM estudiantes WHERE id = $1 AND id_representante = $2', [id, id_representante]);
+        if (verificacion.rows.length === 0) {
+            return res.status(403).send('No tiene permiso para ver las notas de este estudiante.');
+        }
+
+        const notasResult = await db.query('SELECT materia, calificacion, periodo FROM notas WHERE id_estudiante = $1 ORDER BY periodo, materia', [id]);
+        res.json(notasResult.rows);
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Error al obtener las notas.');
+    }
+});
+
 app.get('/', (req, res) => {
   res.redirect('/login.html');
 });
