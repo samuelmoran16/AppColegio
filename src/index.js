@@ -99,7 +99,7 @@ app.get('/api/representantes', auth('admin'), async (req, res) => {
         res.json(result.rows);
     } catch (err) {
         console.error(err);
-        res.status(500).send('Error al obtener los representantes');
+        res.status(500).json({ message: 'Error al obtener los representantes' });
     }
 });
 
@@ -107,7 +107,7 @@ app.get('/api/representantes', auth('admin'), async (req, res) => {
 app.post('/api/representantes', auth('admin'), async (req, res) => {
     const { nombre, email, password } = req.body;
     if (!nombre || !email || !password) {
-        return res.status(400).send('Todos los campos son obligatorios.');
+        return res.status(400).json({ message: 'Todos los campos son obligatorios.' });
     }
     try {
         const hash = await bcrypt.hash(password, 10);
@@ -118,11 +118,10 @@ app.post('/api/representantes', auth('admin'), async (req, res) => {
         res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error(err);
-        // Error de email duplicado
         if (err.code === '23505') {
-            return res.status(409).send('El correo electrónico ya está registrado.');
+            return res.status(409).json({ message: 'El correo electrónico ya está registrado.' });
         }
-        res.status(500).send('Error al registrar el representante');
+        res.status(500).json({ message: 'Error al registrar el representante' });
     }
 });
 
@@ -130,7 +129,7 @@ app.post('/api/representantes', auth('admin'), async (req, res) => {
 app.post('/api/estudiantes', auth('admin'), async (req, res) => {
     const { nombre, cedula, fecha_nacimiento, grado, id_representante } = req.body;
      if (!nombre || !cedula || !id_representante || !grado) {
-        return res.status(400).send('Nombre, Cédula, Grado y Representante son obligatorios.');
+        return res.status(400).json({ message: 'Nombre, Cédula, Grado y Representante son obligatorios.' });
     }
     try {
         const result = await db.query(
@@ -140,10 +139,10 @@ app.post('/api/estudiantes', auth('admin'), async (req, res) => {
         res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error(err);
-         if (err.code === '23505') { // Error de constraint único
-            return res.status(409).send('La cédula ya está registrada.');
+         if (err.code === '23505') { 
+            return res.status(409).json({ message: 'La cédula ya está registrada.' });
         }
-        res.status(500).send('Error al registrar el estudiante');
+        res.status(500).json({ message: 'Error al registrar el estudiante' });
     }
 });
 
@@ -159,7 +158,7 @@ app.get('/api/estudiantes', auth('admin'), async (req, res) => {
         res.json(result.rows);
     } catch (err) {
         console.error(err);
-        res.status(500).send('Error al obtener los estudiantes');
+        res.status(500).json({ message: 'Error al obtener los estudiantes' });
     }
 });
 
@@ -167,17 +166,15 @@ app.get('/api/estudiantes', auth('admin'), async (req, res) => {
 app.post('/api/notas', auth('admin'), async (req, res) => {
     const { cedula_estudiante, materia, calificacion, periodo } = req.body;
     if (!cedula_estudiante || !materia || !calificacion || !periodo) {
-        return res.status(400).send('Todos los campos son obligatorios.');
+        return res.status(400).json({ message: 'Todos los campos son obligatorios.' });
     }
     try {
-        // 1. Encontrar el ID del estudiante usando la cédula
         const estudianteResult = await db.query('SELECT id FROM estudiantes WHERE cedula = $1', [cedula_estudiante]);
         if (estudianteResult.rows.length === 0) {
-            return res.status(404).send('No se encontró ningún estudiante con esa cédula.');
+            return res.status(404).json({ message: 'No se encontró ningún estudiante con esa cédula.' });
         }
         const id_estudiante = estudianteResult.rows[0].id;
 
-        // 2. Insertar la nota con el ID encontrado
         const result = await db.query(
             'INSERT INTO notas (id_estudiante, materia, calificacion, periodo) VALUES ($1, $2, $3, $4) RETURNING *',
             [id_estudiante, materia, calificacion, periodo]
@@ -185,7 +182,7 @@ app.post('/api/notas', auth('admin'), async (req, res) => {
         res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error(err);
-        res.status(500).send('Error al registrar la nota');
+        res.status(500).json({ message: 'Error al registrar la nota' });
     }
 });
 
@@ -213,7 +210,7 @@ app.get('/api/representante/dashboard', auth('representante'), async (req, res) 
 
     } catch (err) {
         console.error(err);
-        res.status(500).send('Error al obtener los datos del dashboard.');
+        res.status(500).json({ message: 'Error al obtener los datos del dashboard.' });
     }
 });
 
@@ -226,7 +223,7 @@ app.get('/api/estudiante/:id/notas', auth('representante'), async (req, res) => 
         // Verificar que el representante solo pueda ver las notas de sus propios hijos
         const verificacion = await db.query('SELECT id FROM estudiantes WHERE id = $1 AND id_representante = $2', [id, id_representante]);
         if (verificacion.rows.length === 0) {
-            return res.status(403).send('No tiene permiso para ver las notas de este estudiante.');
+            return res.status(403).json({ message: 'No tiene permiso para ver las notas de este estudiante.' });
         }
 
         const notasResult = await db.query('SELECT materia, calificacion, periodo FROM notas WHERE id_estudiante = $1 ORDER BY periodo, materia', [id]);
@@ -234,7 +231,7 @@ app.get('/api/estudiante/:id/notas', auth('representante'), async (req, res) => 
 
     } catch (err) {
         console.error(err);
-        res.status(500).send('Error al obtener las notas.');
+        res.status(500).json({ message: 'Error al obtener las notas.' });
     }
 });
 
