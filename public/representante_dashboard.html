@@ -59,10 +59,9 @@
                                 </select>
                             </div>
                             <div class="col-md-6">
-                                <label for="select-año" class="form-label">Año:</label>
+                                <label for="select-año" class="form-label">Año Escolar:</label>
                                 <select class="form-select" id="select-año">
-                                    <option value="2024">2024</option>
-                                    <option value="2025">2025</option>
+                                    <option value="2025">2025 (Septiembre 2025 - Agosto 2025)</option>
                                 </select>
                             </div>
                         </div>
@@ -189,7 +188,7 @@
                 let html = `
                     <div class="card">
                         <div class="card-header">
-                            <h5 class="mb-0">Mensualidades de ${estudiante.nombre} - ${año}</h5>
+                            <h5 class="mb-0">Mensualidades de ${estudiante.nombre} - Año Escolar 2025</h5>
                             <small class="text-muted">Costo por mensualidad: Bs. 12,480.00</small>
                         </div>
                         <div class="card-body">
@@ -208,19 +207,34 @@
                                     <tbody>
                 `;
 
-                // Generar filas para cada mes
-                for (let mes = 1; mes <= 12; mes++) {
-                    const pago = estudiante.pagos.find(p => p.mes === mes && p.año == año);
+                // Generar filas para cada mes escolar (septiembre a agosto)
+                const mesesEscolares = [
+                    { num: 9, nombre: 'Septiembre' },
+                    { num: 10, nombre: 'Octubre' },
+                    { num: 11, nombre: 'Noviembre' },
+                    { num: 12, nombre: 'Diciembre' },
+                    { num: 1, nombre: 'Enero' },
+                    { num: 2, nombre: 'Febrero' },
+                    { num: 3, nombre: 'Marzo' },
+                    { num: 4, nombre: 'Abril' },
+                    { num: 5, nombre: 'Mayo' },
+                    { num: 6, nombre: 'Junio' },
+                    { num: 7, nombre: 'Julio' },
+                    { num: 8, nombre: 'Agosto' }
+                ];
+
+                for (let mesData of mesesEscolares) {
+                    const pago = estudiante.pagos.find(p => p.mes === mesData.num && p.año == año);
                     const estado = pago ? pago.estado : 'pendiente';
                     const fechaPago = pago ? formatearFecha(pago.fecha_pago) : '-';
-                    const fechaVencimiento = pago ? formatearFecha(pago.fecha_vencimiento) : formatearFecha(new Date(año, mes, 0));
+                    const fechaVencimiento = pago ? formatearFecha(pago.fecha_vencimiento) : formatearFecha(new Date(año, mesData.num, 0));
                     
                     const estadoClass = estado === 'pagado' ? 'success' : 'warning';
                     const estadoText = estado === 'pagado' ? 'Pagado' : 'Pendiente';
                     
                     html += `
                         <tr>
-                            <td><strong>${getNombreMes(mes)}</strong></td>
+                            <td><strong>${mesData.nombre}</strong></td>
                             <td>Bs. 12,480.00</td>
                             <td><span class="badge bg-${estadoClass}">${estadoText}</span></td>
                             <td>${fechaPago}</td>
@@ -229,9 +243,14 @@
                     `;
                     
                     if (estado === 'pendiente') {
-                        html += `<button class="btn btn-success btn-sm" onclick="realizarPago(${estudiante.id}, ${mes}, ${año})">Pagar</button>`;
+                        html += `<button class="btn btn-success btn-sm" onclick="realizarPago(${estudiante.id}, ${mesData.num}, ${año})">Pagar</button>`;
                     } else {
-                        html += `<span class="text-success"><i class="bi bi-check-circle"></i> Completado</span>`;
+                        html += `
+                            <span class="text-success me-2"><i class="bi bi-check-circle"></i> Completado</span>
+                            <a href="/facturas/factura_${estudiante.cedula}_${mesData.num}_${año}.pdf" target="_blank" class="btn btn-info btn-sm">
+                                <i class="bi bi-file-pdf"></i> Ver Factura
+                            </a>
+                        `;
                     }
                     
                     html += `
@@ -278,6 +297,16 @@
                 if (!response.ok) throw new Error(data.message);
 
                 showAlert(`Pago de ${getNombreMes(mes)} ${año} realizado con éxito.`);
+                
+                // Si hay factura disponible, mostrarla
+                if (data.factura_url) {
+                    setTimeout(() => {
+                        if (confirm('¿Desea ver la factura del pago?')) {
+                            window.open(data.factura_url, '_blank');
+                        }
+                    }, 1000);
+                }
+                
                 cargarPagos(); // Recargar la tabla
             } catch (error) {
                 showAlert(error.message, 'danger');

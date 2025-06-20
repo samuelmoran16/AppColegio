@@ -4,6 +4,8 @@ const session = require('express-session');
 const bodyParser = require('body-parser');
 const { db, initDB } = require('./db');
 const bcrypt = require('bcrypt');
+const PDFDocument = require('pdfkit');
+const fs = require('fs');
 
 const app = express();
 const port = 3000;
@@ -388,41 +390,6 @@ app.get('/api/representante/pagos', auth('representante'), async (req, res) => {
     }
 });
 
-// Registrar un pago de mensualidad
-app.post('/api/representante/pagos', auth('representante'), async (req, res) => {
-    try {
-        const { estudiante_id, mes, año } = req.body;
-        const id_representante = req.session.user.id;
-
-        // Verificar que el estudiante pertenece al representante
-        const verificacion = await db.query('SELECT id FROM estudiantes WHERE id = $1 AND id_representante = $2', [estudiante_id, id_representante]);
-        if (verificacion.rows.length === 0) {
-            return res.status(403).json({ message: 'No tiene permiso para realizar pagos para este estudiante.' });
-        }
-
-        // Verificar si ya existe un pago para ese mes/año
-        const pagoExistente = await db.query('SELECT id FROM pagos WHERE id_estudiante = $1 AND mes = $2 AND año = $3', [estudiante_id, mes, año]);
-        if (pagoExistente.rows.length > 0) {
-            return res.status(409).json({ message: 'Ya existe un pago registrado para este mes y año.' });
-        }
-
-        // Calcular fecha de vencimiento (último día del mes)
-        const fechaVencimiento = new Date(año, mes, 0); // El día 0 del mes siguiente es el último día del mes actual
-
-        // Registrar el pago como pagado
-        const result = await db.query(`
-            INSERT INTO pagos (id_estudiante, mes, año, monto, estado, fecha_pago, fecha_vencimiento)
-            VALUES ($1, $2, $3, $4, 'pagado', CURRENT_DATE, $5)
-            RETURNING *
-        `, [estudiante_id, mes, año, 12480.00, fechaVencimiento]);
-
-        res.status(201).json(result.rows[0]);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Error al registrar el pago.' });
-    }
-});
-
 // Generar mensualidades pendientes para un estudiante (función auxiliar)
 app.post('/api/admin/generar-mensualidades', auth('admin'), async (req, res) => {
     try {
@@ -431,6 +398,10 @@ app.post('/api/admin/generar-mensualidades', auth('admin'), async (req, res) => 
         // Validaciones
         if (!estudiante_id || !año) {
             return res.status(400).json({ message: 'Estudiante y año son obligatorios.' });
+        }
+
+        if (año !== 2025) {
+            return res.status(400).json({ message: 'Solo se permiten mensualidades para el año 2025.' });
         }
 
         // Verificar que el estudiante existe
@@ -443,8 +414,10 @@ app.post('/api/admin/generar-mensualidades', auth('admin'), async (req, res) => 
         let mensualidadesGeneradas = 0;
         let mensualidadesExistentes = 0;
         
-        // Generar mensualidades para todo el año
-        for (let mes = 1; mes <= 12; mes++) {
+        // Generar mensualidades para el año escolar (septiembre a agosto)
+        const mesesEscolares = [9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8]; // Septiembre a Agosto
+        
+        for (let mes of mesesEscolares) {
             try {
                 // Verificar si ya existe
                 const existe = await db.query('SELECT id FROM pagos WHERE id_estudiante = $1 AND mes = $2 AND año = $3', [estudiante_id, mes, año]);
@@ -469,7 +442,7 @@ app.post('/api/admin/generar-mensualidades', auth('admin'), async (req, res) => 
             }
         }
         
-        let mensaje = `Mensualidades procesadas para ${estudiante.nombre} - Año ${año}. `;
+        let mensaje = `Mensualidades procesadas para ${estudiante.nombre} - Año Escolar 2025 (Septiembre-Agosto). `;
         if (mensualidadesGeneradas > 0) {
             mensaje += `${mensualidadesGeneradas} mensualidades generadas. `;
         }
@@ -487,6 +460,144 @@ app.post('/api/admin/generar-mensualidades', auth('admin'), async (req, res) => 
         res.status(500).json({ 
             message: 'Error al generar mensualidades. Detalles: ' + err.message 
         });
+    }
+});
+
+// Función para generar factura PDF
+async function generarFacturaPDF(pago, estudiante, representante) {
+    return new Promise((resolve, reject) => {
+        try {
+            const doc = new PDFDocument({ size: 'A4', margin: 50 });
+            const filename = `factura_${estudiante.cedula}_${pago.mes}_${pago.año}.pdf`;
+            const filepath = path.join(__dirname, '..', 'public', 'facturas', filename);
+            
+            // Crear directorio si no existe
+            const facturasDir = path.dirname(filepath);
+            if (!fs.existsSync(facturasDir)) {
+                fs.mkdirSync(facturasDir, { recursive: true });
+            }
+            
+            const stream = fs.createWriteStream(filepath);
+            doc.pipe(stream);
+            
+            // Encabezado
+            doc.fontSize(20).font('Helvetica-Bold').text('COLEGIO', { align: 'center' });
+            doc.fontSize(16).font('Helvetica').text('FACTURA DE MENSUALIDAD', { align: 'center' });
+            doc.moveDown();
+            
+            // Información del colegio
+            doc.fontSize(12).font('Helvetica-Bold').text('DATOS DEL COLEGIO:');
+            doc.fontSize(10).font('Helvetica').text('Dirección: Av. Principal, Ciudad');
+            doc.text('Teléfono: (123) 456-7890');
+            doc.text('Email: info@colegio.edu');
+            doc.moveDown();
+            
+            // Información del representante
+            doc.fontSize(12).font('Helvetica-Bold').text('DATOS DEL REPRESENTANTE:');
+            doc.fontSize(10).font('Helvetica').text(`Nombre: ${representante.nombre}`);
+            doc.text(`Email: ${representante.email}`);
+            doc.moveDown();
+            
+            // Información del estudiante
+            doc.fontSize(12).font('Helvetica-Bold').text('DATOS DEL ESTUDIANTE:');
+            doc.fontSize(10).font('Helvetica').text(`Nombre: ${estudiante.nombre}`);
+            doc.text(`Cédula: ${estudiante.cedula}`);
+            doc.text(`Grado: ${estudiante.grado}`);
+            doc.moveDown();
+            
+            // Información del pago
+            doc.fontSize(12).font('Helvetica-Bold').text('DETALLES DEL PAGO:');
+            doc.fontSize(10).font('Helvetica').text(`Mes: ${getNombreMes(pago.mes)} ${pago.año}`);
+            doc.text(`Fecha de Pago: ${new Date(pago.fecha_pago).toLocaleDateString('es-ES')}`);
+            doc.text(`Concepto: ${pago.concepto}`);
+            doc.moveDown();
+            
+            // Tabla de montos
+            doc.fontSize(12).font('Helvetica-Bold').text('RESUMEN DE PAGO:');
+            doc.fontSize(10).font('Helvetica').text(`Monto: Bs. ${pago.monto.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`);
+            doc.moveDown();
+            
+            // Pie de página
+            doc.fontSize(8).font('Helvetica').text('Esta factura es un comprobante oficial de pago.', { align: 'center' });
+            doc.text(`Generada el: ${new Date().toLocaleString('es-ES')}`, { align: 'center' });
+            
+            doc.end();
+            
+            stream.on('finish', () => {
+                resolve(filename);
+            });
+            
+            stream.on('error', (error) => {
+                reject(error);
+            });
+            
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
+
+// Función auxiliar para obtener nombre del mes
+function getNombreMes(mes) {
+    const meses = [
+        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+    return meses[mes - 1];
+}
+
+// Registrar un pago de mensualidad con generación de factura
+app.post('/api/representante/pagos', auth('representante'), async (req, res) => {
+    try {
+        const { estudiante_id, mes, año } = req.body;
+        const id_representante = req.session.user.id;
+
+        // Validaciones
+        if (año !== 2025) {
+            return res.status(400).json({ message: 'Solo se permiten pagos para el año 2025.' });
+        }
+
+        // Verificar que el estudiante pertenece al representante
+        const verificacion = await db.query('SELECT id FROM estudiantes WHERE id = $1 AND id_representante = $2', [estudiante_id, id_representante]);
+        if (verificacion.rows.length === 0) {
+            return res.status(403).json({ message: 'No tiene permiso para realizar pagos para este estudiante.' });
+        }
+
+        // Verificar si ya existe un pago para ese mes/año
+        const pagoExistente = await db.query('SELECT id FROM pagos WHERE id_estudiante = $1 AND mes = $2 AND año = $3', [estudiante_id, mes, año]);
+        if (pagoExistente.rows.length > 0) {
+            return res.status(409).json({ message: 'Ya existe un pago registrado para este mes y año.' });
+        }
+
+        // Calcular fecha de vencimiento (último día del mes)
+        const fechaVencimiento = new Date(año, mes, 0);
+
+        // Registrar el pago como pagado
+        const result = await db.query(`
+            INSERT INTO pagos (id_estudiante, mes, año, monto, estado, fecha_pago, fecha_vencimiento)
+            VALUES ($1, $2, $3, $4, 'pagado', CURRENT_DATE, $5)
+            RETURNING *
+        `, [estudiante_id, mes, año, 12480.00, fechaVencimiento]);
+
+        const pago = result.rows[0];
+
+        // Obtener datos del estudiante y representante para la factura
+        const estudianteResult = await db.query('SELECT * FROM estudiantes WHERE id = $1', [estudiante_id]);
+        const representanteResult = await db.query('SELECT * FROM representantes WHERE id = $1', [id_representante]);
+
+        const estudiante = estudianteResult.rows[0];
+        const representante = representanteResult.rows[0];
+
+        // Generar factura PDF
+        const facturaFilename = await generarFacturaPDF(pago, estudiante, representante);
+
+        res.status(201).json({
+            ...pago,
+            factura_url: `/facturas/${facturaFilename}`
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al registrar el pago.' });
     }
 });
 
