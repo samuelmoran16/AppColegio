@@ -1,0 +1,14 @@
+# Dependencias
+node_modules/
+
+# Archivos de la base de datos local
+colegio.db
+colegio.db-journal
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Variables de entorno
+.env 
