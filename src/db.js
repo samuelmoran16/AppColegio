@@ -2,8 +2,15 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const bcrypt = require('bcrypt');
 
-const dbPath = path.join(__dirname, '..', 'colegio.db');
-const db = new sqlite3.Database(dbPath);
+// Render usa /data para el almacenamiento persistente. Localmente, usa la raíz del proyecto.
+const dbPath = process.env.RENDER ? '/data/colegio.db' : path.join(__dirname, '..', 'colegio.db');
+const db = new sqlite3.Database(dbPath, (err) => {
+  if (err) {
+    console.error("Error al abrir la base de datos", err.message);
+  } else {
+    console.log("Conectado a la base de datos SQLite en:", dbPath);
+  }
+});
 
 // Crear tablas si no existen
 const initDB = () => {
