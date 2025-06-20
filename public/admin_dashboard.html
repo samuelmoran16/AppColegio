@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Panel de Administrador</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
@@ -17,26 +18,39 @@
     </nav>
     <div class="container mt-4">
         <div id="alert-container"></div>
-        <div class="row">
-            <!-- Columna para Registrar Representantes -->
-            <div class="col-md-6 mb-4">
-                <div class="card h-100">
-                    <div class="card-header">
-                        <h4>Registrar Nuevo Representante</h4>
-                    </div>
-                    <div class="card-body">
+        
+        <!-- Accordion para organizar las secciones -->
+        <div class="accordion" id="adminAccordion">
+            
+            <!-- Sección: Registrar Representantes -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingRepresentantes">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseRepresentantes" aria-expanded="false" aria-controls="collapseRepresentantes">
+                        <i class="bi bi-person-plus me-2"></i> Registrar Nuevo Representante
+                    </button>
+                </h2>
+                <div id="collapseRepresentantes" class="accordion-collapse collapse" aria-labelledby="headingRepresentantes" data-bs-parent="#adminAccordion">
+                    <div class="accordion-body">
                         <form id="form-registrar-representante">
-                            <div class="mb-3">
-                                <label for="rep-nombre" class="form-label">Nombre Completo</label>
-                                <input type="text" class="form-control" id="rep-nombre" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="rep-email" class="form-label">Correo Electrónico</label>
-                                <input type="email" class="form-control" id="rep-email" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="rep-password" class="form-label">Contraseña Temporal</label>
-                                <input type="password" class="form-control" id="rep-password" required>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="rep-nombre" class="form-label">Nombre Completo</label>
+                                        <input type="text" class="form-control" id="rep-nombre" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="rep-email" class="form-label">Correo Electrónico</label>
+                                        <input type="email" class="form-control" id="rep-email" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="rep-password" class="form-label">Contraseña Temporal</label>
+                                        <input type="password" class="form-control" id="rep-password" required>
+                                    </div>
+                                </div>
                             </div>
                             <button type="submit" class="btn btn-primary">Registrar Representante</button>
                         </form>
@@ -44,122 +58,166 @@
                 </div>
             </div>
 
-            <!-- Columna para Registrar Estudiantes -->
-            <div class="col-md-6 mb-4">
-                <div class="card h-100">
-                    <div class="card-header">
-                        <h4>Registrar Nuevo Estudiante</h4>
-                    </div>
-                    <div class="card-body">
+            <!-- Sección: Registrar Estudiantes -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingEstudiantes">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseEstudiantes" aria-expanded="false" aria-controls="collapseEstudiantes">
+                        <i class="bi bi-mortarboard me-2"></i> Registrar Nuevo Estudiante
+                    </button>
+                </h2>
+                <div id="collapseEstudiantes" class="accordion-collapse collapse" aria-labelledby="headingEstudiantes" data-bs-parent="#adminAccordion">
+                    <div class="accordion-body">
                         <form id="form-registrar-estudiante">
-                            <div class="mb-3">
-                                <label for="est-nombre" class="form-label">Nombre Completo del Estudiante</label>
-                                <input type="text" class="form-control" id="est-nombre" required>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="est-nombre" class="form-label">Nombre Completo del Estudiante</label>
+                                        <input type="text" class="form-control" id="est-nombre" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="est-cedula" class="form-label">Cédula de Identidad</label>
+                                        <input type="text" class="form-control" id="est-cedula" required>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="mb-3">
-                                <label for="est-cedula" class="form-label">Cédula de Identidad</label>
-                                <input type="text" class="form-control" id="est-cedula" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="est-fecha-nacimiento" class="form-label">Fecha de Nacimiento</label>
-                                <input type="date" class="form-control" id="est-fecha-nacimiento">
-                            </div>
-                            <div class="mb-3">
-                                <label for="est-grado" class="form-label">Grado</label>
-                                <select class="form-select" id="est-grado" required>
-                                    <option value="">Seleccione un grado</option>
-                                    <option value="1er Grado">1er Grado</option>
-                                    <option value="2do Grado">2do Grado</option>
-                                    <option value="3er Grado">3er Grado</option>
-                                    <option value="4to Grado">4to Grado</option>
-                                    <option value="5to Grado">5to Grado</option>
-                                    <option value="6to Grado">6to Grado</option>
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label for="est-representante" class="form-label">Asignar a Representante</label>
-                                <select class="form-select" id="est-representante" required>
-                                    <option value="">Cargando representantes...</option>
-                                </select>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="est-fecha-nacimiento" class="form-label">Fecha de Nacimiento</label>
+                                        <input type="date" class="form-control" id="est-fecha-nacimiento">
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="est-grado" class="form-label">Grado</label>
+                                        <select class="form-select" id="est-grado" required>
+                                            <option value="">Seleccione un grado</option>
+                                            <option value="1er Grado">1er Grado</option>
+                                            <option value="2do Grado">2do Grado</option>
+                                            <option value="3er Grado">3er Grado</option>
+                                            <option value="4to Grado">4to Grado</option>
+                                            <option value="5to Grado">5to Grado</option>
+                                            <option value="6to Grado">6to Grado</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="est-representante" class="form-label">Asignar a Representante</label>
+                                        <select class="form-select" id="est-representante" required>
+                                            <option value="">Cargando representantes...</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
                             <button type="submit" class="btn btn-success">Registrar Estudiante</button>
                         </form>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <div class="row mt-2">
-             <!-- Columna para Registrar Notas -->
-            <div class="col-md-6 mb-4">
-                <div class="card h-100">
-                    <div class="card-header">
-                        <h4>Registrar Notas</h4>
-                    </div>
-                    <div class="card-body">
+            <!-- Sección: Registrar Notas -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingNotas">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseNotas" aria-expanded="false" aria-controls="collapseNotas">
+                        <i class="bi bi-journal-plus me-2"></i> Registrar Notas
+                    </button>
+                </h2>
+                <div id="collapseNotas" class="accordion-collapse collapse" aria-labelledby="headingNotas" data-bs-parent="#adminAccordion">
+                    <div class="accordion-body">
                         <form id="form-registrar-nota">
-                            <div class="mb-3">
-                                <label for="nota-cedula-estudiante" class="form-label">Cédula del Estudiante</label>
-                                <input type="text" class="form-control" id="nota-cedula-estudiante" required placeholder="Ingrese la cédula...">
-                            </div>
-                             <div class="mb-3">
-                                <label for="nota-materia" class="form-label">Materia</label>
-                                <select class="form-select" id="nota-materia" required>
-                                    <option value="">Seleccione una materia</option>
-                                    <option value="Lengua">Lengua</option>
-                                    <option value="Ingles">Inglés</option>
-                                    <option value="Frances">Francés</option>
-                                    <option value="Ciencias y Tecnología">Ciencias y Tecnología</option>
-                                    <option value="Matematicas">Matemáticas</option>
-                                    <option value="Ciencias Sociales">Ciencias Sociales</option>
-                                    <option value="Computación">Computación</option>
-                                    <option value="Artes plasticas">Artes Plásticas</option>
-                                    <option value="Educación Fisica">Educación Física</option>
-                                    <option value="Musica">Música</option>
-                                </select>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="nota-cedula-estudiante" class="form-label">Cédula del Estudiante</label>
+                                        <input type="text" class="form-control" id="nota-cedula-estudiante" required placeholder="Ingrese la cédula...">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="nota-materia" class="form-label">Materia</label>
+                                        <select class="form-select" id="nota-materia" required>
+                                            <option value="">Seleccione una materia</option>
+                                            <option value="Lengua">Lengua</option>
+                                            <option value="Ingles">Inglés</option>
+                                            <option value="Frances">Francés</option>
+                                            <option value="Ciencias y Tecnología">Ciencias y Tecnología</option>
+                                            <option value="Matematicas">Matemáticas</option>
+                                            <option value="Ciencias Sociales">Ciencias Sociales</option>
+                                            <option value="Computación">Computación</option>
+                                            <option value="Artes plasticas">Artes Plásticas</option>
+                                            <option value="Educación Fisica">Educación Física</option>
+                                            <option value="Musica">Música</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
                             <div class="row">
-                                <div class="col-6 mb-3">
-                                    <label for="nota-calificacion" class="form-label">Calificación</label>
-                                    <input type="number" step="0.01" class="form-control" id="nota-calificacion" required>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="nota-calificacion" class="form-label">Calificación</label>
+                                        <input type="number" step="0.01" class="form-control" id="nota-calificacion" required>
+                                    </div>
                                 </div>
-                                <div class="col-6 mb-3">
-                                    <label for="nota-periodo" class="form-label">Período</label>
-                                    <select class="form-select" id="nota-periodo" required>
-                                        <option value="">Seleccione un lapso</option>
-                                        <option value="1er Lapso">1er Lapso</option>
-                                        <option value="2do Lapso">2do Lapso</option>
-                                        <option value="3er Lapso">3er Lapso</option>
-                                    </select>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="nota-periodo" class="form-label">Período</label>
+                                        <select class="form-select" id="nota-periodo" required>
+                                            <option value="">Seleccione un lapso</option>
+                                            <option value="1er Lapso">1er Lapso</option>
+                                            <option value="2do Lapso">2do Lapso</option>
+                                            <option value="3er Lapso">3er Lapso</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label class="form-label">&nbsp;</label>
+                                        <button type="submit" class="btn btn-info w-100">Registrar Nota</button>
+                                    </div>
                                 </div>
                             </div>
-                            <button type="submit" class="btn btn-info">Registrar Nota</button>
                         </form>
                     </div>
                 </div>
             </div>
 
-            <div class="col-md-6 mb-4">
-                <div class="card h-100">
-                     <div class="card-header">
-                        <h4>Estudiantes Registrados</h4>
+            <!-- Sección: Estudiantes Registrados -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingListaEstudiantes">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseListaEstudiantes" aria-expanded="false" aria-controls="collapseListaEstudiantes">
+                        <i class="bi bi-people me-2"></i> Estudiantes Registrados
+                    </button>
+                </h2>
+                <div id="collapseListaEstudiantes" class="accordion-collapse collapse" aria-labelledby="headingListaEstudiantes" data-bs-parent="#adminAccordion">
+                    <div class="accordion-body">
+                        <div style="max-height: 400px; overflow-y: auto;">
+                            <ul class="list-group" id="lista-estudiantes">
+                                <!-- La lista se llenará dinámicamente -->
+                            </ul>
+                        </div>
                     </div>
-                    <div class="card-body" style="max-height: 400px; overflow-y: auto;">
-                        <ul class="list-group" id="lista-estudiantes">
+                </div>
+            </div>
+
+            <!-- Sección: Representantes Registrados -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingListaRepresentantes">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseListaRepresentantes" aria-expanded="false" aria-controls="collapseListaRepresentantes">
+                        <i class="bi bi-person-badge me-2"></i> Representantes Registrados
+                    </button>
+                </h2>
+                <div id="collapseListaRepresentantes" class="accordion-collapse collapse" aria-labelledby="headingListaRepresentantes" data-bs-parent="#adminAccordion">
+                    <div class="accordion-body">
+                        <ul class="list-group" id="lista-representantes">
                             <!-- La lista se llenará dinámicamente -->
                         </ul>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <div class="row mt-2">
-            <div class="col-12">
-                <h3>Representantes Registrados</h3>
-                <ul class="list-group" id="lista-representantes">
-                    <!-- La lista se llenará dinámicamente -->
-                </ul>
-            </div>
         </div>
     </div>
 
