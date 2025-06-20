@@ -16,9 +16,174 @@
         </div>
     </nav>
     <div class="container mt-4">
-        <h1>Bienvenido, Administrador</h1>
-        <p>Aquí podrás gestionar representantes, estudiantes, pagos y notas.</p>
-        <!-- Aquí irá el contenido principal del dashboard -->
+        <div id="alert-container"></div>
+        <div class="row">
+            <!-- Columna para Registrar Representantes -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h4>Registrar Nuevo Representante</h4>
+                    </div>
+                    <div class="card-body">
+                        <form id="form-registrar-representante">
+                            <div class="mb-3">
+                                <label for="rep-nombre" class="form-label">Nombre Completo</label>
+                                <input type="text" class="form-control" id="rep-nombre" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="rep-email" class="form-label">Correo Electrónico</label>
+                                <input type="email" class="form-control" id="rep-email" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="rep-password" class="form-label">Contraseña Temporal</label>
+                                <input type="password" class="form-control" id="rep-password" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Registrar Representante</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Columna para Registrar Estudiantes -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h4>Registrar Nuevo Estudiante</h4>
+                    </div>
+                    <div class="card-body">
+                        <form id="form-registrar-estudiante">
+                            <div class="mb-3">
+                                <label for="est-nombre" class="form-label">Nombre Completo del Estudiante</label>
+                                <input type="text" class="form-control" id="est-nombre" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="est-fecha-nacimiento" class="form-label">Fecha de Nacimiento</label>
+                                <input type="date" class="form-control" id="est-fecha-nacimiento">
+                            </div>
+                            <div class="mb-3">
+                                <label for="est-representante" class="form-label">Asignar a Representante</label>
+                                <select class="form-select" id="est-representante" required>
+                                    <option value="">Cargando representantes...</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-success">Registrar Estudiante</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-12">
+                <h3>Representantes Registrados</h3>
+                <ul class="list-group" id="lista-representantes">
+                    <!-- La lista se llenará dinámicamente -->
+                </ul>
+            </div>
+        </div>
     </div>
+
+    <script>
+        const formRepresentante = document.getElementById('form-registrar-representante');
+        const formEstudiante = document.getElementById('form-registrar-estudiante');
+        const selectRepresentante = document.getElementById('est-representante');
+        const listaRepresentantes = document.getElementById('lista-representantes');
+        const alertContainer = document.getElementById('alert-container');
+
+        // Función para mostrar alertas
+        function showAlert(message, type = 'success') {
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = [
+                `<div class="alert alert-${type} alert-dismissible" role="alert">`,
+                `   <div>${message}</div>`,
+                '   <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>',
+                '</div>'
+            ].join('');
+            alertContainer.append(wrapper);
+        }
+
+        // Cargar representantes al iniciar la página
+        async function cargarRepresentantes() {
+            try {
+                const response = await fetch('/api/representantes');
+                if (!response.ok) throw new Error('No se pudo cargar la lista.');
+                const representantes = await response.json();
+
+                selectRepresentante.innerHTML = '<option value="">Seleccione un representante</option>';
+                listaRepresentantes.innerHTML = '';
+                
+                representantes.forEach(rep => {
+                    // Llenar el dropdown
+                    const option = document.createElement('option');
+                    option.value = rep.id;
+                    option.textContent = rep.nombre;
+                    selectRepresentante.appendChild(option);
+
+                    // Llenar la lista
+                    const li = document.createElement('li');
+                    li.className = 'list-group-item';
+                    li.textContent = `${rep.nombre} (${rep.email})`;
+                    listaRepresentantes.appendChild(li);
+                });
+            } catch (error) {
+                showAlert(error.message, 'danger');
+            }
+        }
+
+        // Evento para registrar representante
+        formRepresentante.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const body = {
+                nombre: document.getElementById('rep-nombre').value,
+                email: document.getElementById('rep-email').value,
+                password: document.getElementById('rep-password').value
+            };
+
+            try {
+                const response = await fetch('/api/representantes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.message || response.statusText);
+
+                showAlert('Representante registrado con éxito.');
+                formRepresentante.reset();
+                cargarRepresentantes(); // Recargar la lista
+            } catch (error) {
+                showAlert(error.message, 'danger');
+            }
+        });
+        
+        // Evento para registrar estudiante
+        formEstudiante.addEventListener('submit', async (e) => {
+             e.preventDefault();
+            const body = {
+                nombre: document.getElementById('est-nombre').value,
+                fecha_nacimiento: document.getElementById('est-fecha-nacimiento').value,
+                id_representante: document.getElementById('est-representante').value
+            };
+
+            try {
+                const response = await fetch('/api/estudiantes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.message || response.statusText);
+
+                showAlert('Estudiante registrado con éxito.');
+                formEstudiante.reset();
+            } catch (error) {
+                showAlert(error.message, 'danger');
+            }
+        });
+
+        // Carga inicial
+        document.addEventListener('DOMContentLoaded', cargarRepresentantes);
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html> 
