@@ -39,23 +39,36 @@ const initDB = async () => {
       id_representante INTEGER REFERENCES representantes(id)
     )`);
 
-    // Tabla Pagos
+    // Tabla Pagos (Mejorada)
     await pool.query(`CREATE TABLE IF NOT EXISTS pagos (
       id SERIAL PRIMARY KEY,
-      id_estudiante INTEGER REFERENCES estudiantes(id),
+      id_estudiante INTEGER REFERENCES estudiantes(id) ON DELETE CASCADE,
       monto DECIMAL(10, 2) NOT NULL,
-      fecha DATE NOT NULL,
-      concepto TEXT
+      concepto VARCHAR(255) NOT NULL,
+      fecha_pago DATE NOT NULL DEFAULT CURRENT_DATE,
+      metodo_pago VARCHAR(100),
+      referencia VARCHAR(255),
+      estado VARCHAR(50) NOT NULL DEFAULT 'Pendiente' -- Ej: Pendiente, Verificado, Rechazado
     )`);
 
     // Tabla Notas
     await pool.query(`CREATE TABLE IF NOT EXISTS notas (
       id SERIAL PRIMARY KEY,
-      id_estudiante INTEGER REFERENCES estudiantes(id),
+      id_estudiante INTEGER REFERENCES estudiantes(id) ON DELETE CASCADE,
       materia VARCHAR(255) NOT NULL,
       calificacion DECIMAL(4, 2) NOT NULL,
-      periodo VARCHAR(100) NOT NULL
+      periodo VARCHAR(100) NOT NULL,
+      UNIQUE(id_estudiante, materia, periodo)
     )`);
+
+    // Añadir ON DELETE CASCADE a la tabla de notas si aún no existe
+    // Esto es para manejar una posible actualización desde una versión anterior de la DB
+    try {
+        await pool.query('ALTER TABLE notas DROP CONSTRAINT notas_id_estudiante_fkey, ADD CONSTRAINT notas_id_estudiante_fkey FOREIGN KEY (id_estudiante) REFERENCES estudiantes(id) ON DELETE CASCADE');
+    } catch (e) {
+        // Ignorar el error si la constraint ya existe o no se puede modificar,
+        // ya que la definición de la tabla ya la incluye.
+    }
 
     // Insertar admin por defecto si no existe
     const adminEmail = 'admin@colegio.com';

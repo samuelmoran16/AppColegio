@@ -356,6 +356,153 @@ app.get('/api/estudiante/:id/notas', auth('representante'), async (req, res) => 
     }
 });
 
+// --- API para Gestión de Notas ---
+
+// Obtener todas las notas de un estudiante (para el admin)
+app.get('/api/admin/estudiantes/:id/notas', auth('admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await db.query('SELECT id, materia, calificacion, periodo FROM notas WHERE id_estudiante = $1 ORDER BY periodo, materia', [id]);
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al obtener las notas del estudiante.' });
+    }
+});
+
+// Actualizar una nota
+app.put('/api/notas/:id', auth('admin'), async (req, res) => {
+    const { id } = req.params;
+    const { materia, calificacion, periodo } = req.body;
+    if (!materia || !calificacion || !periodo) {
+        return res.status(400).json({ message: 'Todos los campos son obligatorios.' });
+    }
+    try {
+        const result = await db.query(
+            'UPDATE notas SET materia = $1, calificacion = $2, periodo = $3 WHERE id = $4 RETURNING *',
+            [materia, calificacion, periodo, id]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Nota no encontrada.' });
+        }
+        res.status(200).json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al actualizar la nota.' });
+    }
+});
+
+// Eliminar una nota
+app.delete('/api/notas/:id', auth('admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await db.query('DELETE FROM notas WHERE id = $1', [id]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Nota no encontrada.' });
+        }
+        res.status(200).json({ message: 'Nota eliminada con éxito.' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al eliminar la nota.' });
+    }
+});
+
+// --- API para Gestión de Pagos ---
+
+// Registrar un nuevo pago
+app.post('/api/pagos', auth('admin'), async (req, res) => {
+    const { cedula_estudiante, monto, concepto, metodo_pago, referencia, estado } = req.body;
+    if (!cedula_estudiante || !monto || !concepto) {
+        return res.status(400).json({ message: 'Cédula, monto y concepto son obligatorios.' });
+    }
+    try {
+        const estudianteResult = await db.query('SELECT id FROM estudiantes WHERE cedula = $1', [cedula_estudiante]);
+        if (estudianteResult.rows.length === 0) {
+            return res.status(404).json({ message: 'No se encontró ningún estudiante con esa cédula.' });
+        }
+        const id_estudiante = estudianteResult.rows[0].id;
+
+        const result = await db.query(
+            'INSERT INTO pagos (id_estudiante, monto, concepto, metodo_pago, referencia, estado) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+            [id_estudiante, monto, concepto, metodo_pago, referencia, estado || 'Pendiente']
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al registrar el pago.' });
+    }
+});
+
+// Obtener todos los pagos de un estudiante (para admin)
+app.get('/api/admin/estudiantes/:id/pagos', auth('admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await db.query('SELECT * FROM pagos WHERE id_estudiante = $1 ORDER BY fecha_pago DESC', [id]);
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al obtener los pagos.' });
+    }
+});
+
+// Actualizar un pago
+app.put('/api/pagos/:id', auth('admin'), async (req, res) => {
+    const { id } = req.params;
+    const { monto, concepto, metodo_pago, referencia, estado } = req.body;
+     if (!monto || !concepto || !estado) {
+        return res.status(400).json({ message: 'Monto, concepto y estado son obligatorios.' });
+    }
+    try {
+        const result = await db.query(
+            'UPDATE pagos SET monto = $1, concepto = $2, metodo_pago = $3, referencia = $4, estado = $5 WHERE id = $6 RETURNING *',
+            [monto, concepto, metodo_pago, referencia, estado, id]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Pago no encontrado.' });
+        }
+        res.status(200).json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al actualizar el pago.' });
+    }
+});
+
+// Eliminar un pago
+app.delete('/api/pagos/:id', auth('admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await db.query('DELETE FROM pagos WHERE id = $1', [id]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Pago no encontrado.' });
+        }
+        res.status(200).json({ message: 'Pago eliminado con éxito.' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al eliminar el pago.' });
+    }
+});
+
+// Obtener pagos de un estudiante específico (para representante)
+app.get('/api/estudiante/:id/pagos', auth('representante'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const id_representante = req.session.user.id;
+
+        // Verificar que el representante solo pueda ver los pagos de sus propios hijos
+        const verificacion = await db.query('SELECT id FROM estudiantes WHERE id = $1 AND id_representante = $2', [id, id_representante]);
+        if (verificacion.rows.length === 0) {
+            return res.status(403).json({ message: 'No tiene permiso para ver los pagos de este estudiante.' });
+        }
+
+        const pagosResult = await db.query('SELECT concepto, monto, fecha_pago, estado, metodo_pago, referencia FROM pagos WHERE id_estudiante = $1 ORDER BY fecha_pago DESC', [id]);
+        res.json(pagosResult.rows);
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al obtener los pagos.' });
+    }
+});
+
 app.get('/', (req, res) => {
   res.redirect('/login.html');
 });
