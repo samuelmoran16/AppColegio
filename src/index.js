@@ -326,6 +326,57 @@ app.get('/api/estudiante/:id/notas', auth('representante'), async (req, res) => 
     }
 });
 
+// --- Rutas para la gestión de Notas por parte del Admin ---
+
+// Obtener todas las notas de un estudiante (versión admin)
+app.get('/api/admin/estudiantes/:id/notas', auth('admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        const notasResult = await db.query('SELECT id, materia, calificacion, periodo FROM notas WHERE id_estudiante = $1 ORDER BY periodo, materia', [id]);
+        res.json(notasResult.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al obtener las notas del estudiante.' });
+    }
+});
+
+// Actualizar una nota
+app.put('/api/notas/:id', auth('admin'), async (req, res) => {
+    const { id } = req.params;
+    const { materia, calificacion, periodo } = req.body;
+    if (!materia || !calificacion || !periodo) {
+        return res.status(400).json({ message: 'Todos los campos son obligatorios.' });
+    }
+    try {
+        const result = await db.query(
+            'UPDATE notas SET materia = $1, calificacion = $2, periodo = $3 WHERE id = $4 RETURNING *',
+            [materia, calificacion, periodo, id]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Nota no encontrada.' });
+        }
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al actualizar la nota.' });
+    }
+});
+
+// Eliminar una nota
+app.delete('/api/notas/:id', auth('admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await db.query('DELETE FROM notas WHERE id = $1', [id]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Nota no encontrada.' });
+        }
+        res.status(200).json({ message: 'Nota eliminada con éxito.' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al eliminar la nota.' });
+    }
+});
+
 app.get('/', (req, res) => {
   res.redirect('/login.html');
 });

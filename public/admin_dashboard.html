@@ -198,8 +198,11 @@
                         const li = document.createElement('li');
                         li.className = 'list-group-item d-flex justify-content-between align-items-center';
                         li.innerHTML = `
-                            <span>${est.nombre} (C.I: ${est.cedula}) - ${est.grado}</span>
                             <div>
+                                ${est.nombre} (C.I: ${est.cedula})
+                            </div>
+                            <div>
+                                <button class="btn btn-secondary btn-sm me-2" onclick='abrirModalGestionarNotas(${est.id}, "${est.nombre}")'>Notas</button>
                                 <button class="btn btn-warning btn-sm me-2" onclick='abrirModalEditarEstudiante(${JSON.stringify(est)})'>Editar</button>
                                 <button class="btn btn-danger btn-sm" onclick="eliminarEstudiante(${est.id}, '${est.nombre}')">Eliminar</button>
                             </div>
@@ -474,6 +477,154 @@
                 showAlert(error.message, 'danger');
             }
         });
+    </script>
+
+    <!-- Modal para Gestionar Notas -->
+    <div class="modal fade" id="notasModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="notasModalLabel">Gestionar Notas</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Materia</th>
+                                <th>Período</th>
+                                <th>Calificación</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="notas-tbody">
+                            <!-- Contenido dinámico -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const notasModalEl = document.getElementById('notasModal');
+        const notasModal = new bootstrap.Modal(notasModalEl);
+        const notasModalLabel = document.getElementById('notasModalLabel');
+        const notasTbody = document.getElementById('notas-tbody');
+        let currentStudentId = null;
+
+        async function abrirModalGestionarNotas(estudianteId, estudianteNombre) {
+            currentStudentId = estudianteId;
+            notasModalLabel.textContent = `Gestionar Notas de ${estudianteNombre}`;
+            notasTbody.innerHTML = '<tr><td colspan="4">Cargando...</td></tr>';
+            notasModal.show();
+            
+            try {
+                const response = await fetch(`/api/admin/estudiantes/${estudianteId}/notas`);
+                if (!response.ok) throw new Error('Error al cargar las notas');
+                const notas = await response.json();
+                renderizarNotas(notas);
+            } catch (error) {
+                notasTbody.innerHTML = `<tr><td colspan="4" class="text-danger">${error.message}</td></tr>`;
+            }
+        }
+
+        function renderizarNotas(notas) {
+            notasTbody.innerHTML = '';
+            if (notas.length === 0) {
+                notasTbody.innerHTML = '<tr><td colspan="4">No hay notas registradas.</td></tr>';
+                return;
+            }
+            notas.forEach(nota => {
+                const tr = document.createElement('tr');
+                tr.id = `nota-row-${nota.id}`;
+                tr.innerHTML = `
+                    <td>${nota.materia}</td>
+                    <td>${nota.periodo}</td>
+                    <td>${nota.calificacion}</td>
+                    <td>
+                        <button class="btn btn-warning btn-sm" onclick="editarNota(${nota.id})">Editar</button>
+                        <button class="btn btn-danger btn-sm" onclick="eliminarNota(${nota.id})">Eliminar</button>
+                    </td>
+                `;
+                notasTbody.appendChild(tr);
+            });
+        }
+
+        function editarNota(notaId) {
+            const tr = document.getElementById(`nota-row-${notaId}`);
+            const materia = tr.children[0].textContent;
+            const periodo = tr.children[1].textContent;
+            const calificacion = tr.children[2].textContent;
+
+            tr.innerHTML = `
+                <td>
+                    <select class="form-select form-select-sm" id="edit-nota-materia-${notaId}">
+                        <option value="Lengua" ${materia === 'Lengua' ? 'selected' : ''}>Lengua</option>
+                        <option value="Ingles" ${materia === 'Ingles' ? 'selected' : ''}>Inglés</option>
+                        <option value="Frances" ${materia === 'Frances' ? 'selected' : ''}>Francés</option>
+                        <option value="Ciencias y Tecnología" ${materia === 'Ciencias y Tecnología' ? 'selected' : ''}>Ciencias y Tecnología</option>
+                        <option value="Matematicas" ${materia === 'Matematicas' ? 'selected' : ''}>Matemáticas</option>
+                        <option value="Ciencias Sociales" ${materia === 'Ciencias Sociales' ? 'selected' : ''}>Ciencias Sociales</option>
+                        <option value="Computación" ${materia === 'Computación' ? 'selected' : ''}>Computación</option>
+                        <option value="Artes plasticas" ${materia === 'Artes plasticas' ? 'selected' : ''}>Artes Plásticas</option>
+                        <option value="Educación Fisica" ${materia === 'Educación Fisica' ? 'selected' : ''}>Educación Física</option>
+                        <option value="Musica" ${materia === 'Musica' ? 'selected' : ''}>Música</option>
+                    </select>
+                </td>
+                <td>
+                    <select class="form-select form-select-sm" id="edit-nota-periodo-${notaId}">
+                        <option value="1er Lapso" ${periodo === '1er Lapso' ? 'selected' : ''}>1er Lapso</option>
+                        <option value="2do Lapso" ${periodo === '2do Lapso' ? 'selected' : ''}>2do Lapso</option>
+                        <option value="3er Lapso" ${periodo === '3er Lapso' ? 'selected' : ''}>3er Lapso</option>
+                    </select>
+                </td>
+                <td>
+                    <input type="number" step="0.01" class="form-control form-control-sm" id="edit-nota-calificacion-${notaId}" value="${calificacion}">
+                </td>
+                <td>
+                    <button class="btn btn-success btn-sm" onclick="guardarNota(${notaId})">Guardar</button>
+                    <button class="btn btn-secondary btn-sm" onclick="cancelarEdicion()">Cancelar</button>
+                </td>
+            `;
+        }
+
+        function cancelarEdicion() {
+            // Simplemente recargamos las notas para cancelar
+            abrirModalGestionarNotas(currentStudentId, notasModalLabel.textContent.replace('Gestionar Notas de ', ''));
+        }
+
+        async function guardarNota(notaId) {
+            const body = {
+                materia: document.getElementById(`edit-nota-materia-${notaId}`).value,
+                periodo: document.getElementById(`edit-nota-periodo-${notaId}`).value,
+                calificacion: document.getElementById(`edit-nota-calificacion-${notaId}`).value
+            };
+
+            try {
+                const response = await fetch(`/api/notas/${notaId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                if (!response.ok) throw new Error('Error al guardar la nota.');
+                const notas = await response.json();
+                cancelarEdicion(); // Recarga la lista de notas
+            } catch (error) {
+                showAlert(error.message, 'danger');
+            }
+        }
+
+        async function eliminarNota(notaId) {
+            if (!confirm('¿Estás seguro de que quieres eliminar esta nota?')) return;
+            try {
+                const response = await fetch(`/api/notas/${notaId}`, { method: 'DELETE' });
+                if (!response.ok) throw new Error('Error al eliminar la nota.');
+                cancelarEdicion(); // Recarga la lista de notas
+            } catch (error) {
+                showAlert(error.message, 'danger');
+            }
+        }
     </script>
 </body>
 </html> 
