@@ -166,6 +166,25 @@
                     return;
                 }
 
+                // Verificar si hay pagos para el año seleccionado
+                const pagosDelAño = estudiante.pagos.filter(p => p.año == año);
+                
+                if (pagosDelAño.length === 0) {
+                    pagosContainer.innerHTML = `
+                        <div class="alert alert-info">
+                            <h5><i class="bi bi-info-circle"></i> No hay mensualidades generadas</h5>
+                            <p>No se han generado mensualidades para ${estudiante.nombre} en el año ${año}.</p>
+                            <p><strong>Instrucciones:</strong></p>
+                            <ul>
+                                <li>El administrador debe generar las mensualidades desde el panel de administración</li>
+                                <li>Una vez generadas, podrás ver y realizar los pagos aquí</li>
+                                <li>Cada mensualidad tiene un costo de Bs. 12,480.00</li>
+                            </ul>
+                        </div>
+                    `;
+                    return;
+                }
+
                 // Generar tabla de pagos para el año seleccionado
                 let html = `
                     <div class="card">
@@ -232,7 +251,13 @@
                 pagosContainer.innerHTML = html;
 
             } catch (error) {
-                pagosContainer.innerHTML = `<p class="text-danger">${error.message}</p>`;
+                pagosContainer.innerHTML = `
+                    <div class="alert alert-danger">
+                        <h5><i class="bi bi-exclamation-triangle"></i> Error al cargar los pagos</h5>
+                        <p>${error.message}</p>
+                        <p>Si el problema persiste, contacte al administrador.</p>
+                    </div>
+                `;
             }
         }
 
