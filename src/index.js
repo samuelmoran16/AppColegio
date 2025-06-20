@@ -144,6 +144,40 @@ app.post('/api/estudiantes', auth('admin'), async (req, res) => {
     }
 });
 
+// Obtener todos los estudiantes
+app.get('/api/estudiantes', auth('admin'), async (req, res) => {
+    try {
+        const result = await db.query(`
+            SELECT e.id, e.nombre, r.nombre as nombre_representante 
+            FROM estudiantes e 
+            JOIN representantes r ON e.id_representante = r.id 
+            ORDER BY e.nombre
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Error al obtener los estudiantes');
+    }
+});
+
+// Registrar una nueva nota
+app.post('/api/notas', auth('admin'), async (req, res) => {
+    const { id_estudiante, materia, calificacion, periodo } = req.body;
+    if (!id_estudiante || !materia || !calificacion || !periodo) {
+        return res.status(400).send('Todos los campos son obligatorios.');
+    }
+    try {
+        const result = await db.query(
+            'INSERT INTO notas (id_estudiante, materia, calificacion, periodo) VALUES ($1, $2, $3, $4) RETURNING *',
+            [id_estudiante, materia, calificacion, periodo]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Error al registrar la nota');
+    }
+});
+
 // --- API para Representantes ---
 
 // Obtener datos del representante logueado y sus hijos
