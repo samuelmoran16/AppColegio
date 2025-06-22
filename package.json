@@ -1,23 +1,29 @@
 {
   "name": "webapp-colegio",
   "version": "1.0.0",
-  "description": "",
+  "description": "Aplicación web para gestión escolar",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "nodemon src/index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": ["colegio", "escuela", "gestión", "estudiantes"],
+  "author": "Tu Nombre",
+  "license": "MIT",
   "type": "commonjs",
   "dependencies": {
-    "bcrypt": "^6.0.0",
-    "body-parser": "^2.2.0",
-    "express": "^5.1.0",
-    "express-session": "^1.18.1",
-    "pdfkit": "^0.17.1",
-    "pg": "^8.16.2",
-    "sqlite3": "^5.1.7"
+    "express": "^4.18.2",
+    "express-session": "^1.17.3",
+    "body-parser": "^1.20.2",
+    "bcrypt": "^5.1.0",
+    "pg": "^8.11.0",
+    "sqlite3": "^5.1.6",
+    "pdfkit": "^0.13.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

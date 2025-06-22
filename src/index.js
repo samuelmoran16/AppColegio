@@ -37,7 +37,7 @@ app.post('/login', async (req, res) => {
     }
     
     try {
-        const result = await db.query(`SELECT * FROM ${tableName} WHERE email = $1`, [email]);
+        const result = await db.query(`SELECT * FROM ${tableName} WHERE email = ?`, [email]);
         const user = result.rows[0];
 
         if (!user) return res.status(401).send('Credenciales incorrectas');
@@ -114,13 +114,13 @@ app.post('/api/representantes', auth('admin'), async (req, res) => {
     try {
         const hash = await bcrypt.hash(password, 10);
         const result = await db.query(
-            'INSERT INTO representantes (nombre, email, password) VALUES ($1, $2, $3) RETURNING id, nombre, email',
+            'INSERT INTO representantes (nombre, email, password) VALUES (?, ?, ?) RETURNING id, nombre, email',
             [nombre, email, hash]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error(err);
-        if (err.code === '23505') {
+        if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
             return res.status(409).json({ message: 'El correo electrónico ya está registrado.' });
         }
         res.status(500).json({ message: 'Error al registrar el representante' });
@@ -130,22 +130,22 @@ app.post('/api/representantes', auth('admin'), async (req, res) => {
 // Registrar un nuevo estudiante
 app.post('/api/estudiantes', auth('admin'), async (req, res) => {
     const { nombre, cedula, fecha_nacimiento, grado, id_representante } = req.body;
-     if (!nombre || !cedula || !id_representante || !grado) {
-        return res.status(400).json({ message: 'Nombre, Cédula, Grado y Representante son obligatorios.' });
+     if (!nombre || !id_representante || !grado) {
+        return res.status(400).json({ message: 'Nombre, Grado y Representante son obligatorios.' });
     }
     try {
         // Generar carnet único
         const carnet = await generarCarnetUnico();
         
         const result = await db.query(
-            'INSERT INTO estudiantes (carnet, nombre, cedula, fecha_nacimiento, grado, id_representante) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-            [carnet, nombre, cedula, fecha_nacimiento || null, grado, id_representante]
+            'INSERT INTO estudiantes (carnet, nombre, cedula, fecha_nacimiento, grado, id_representante) VALUES (?, ?, ?, ?, ?, ?) RETURNING *',
+            [carnet, nombre, cedula || null, fecha_nacimiento || null, grado, id_representante]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error(err);
-         if (err.code === '23505') { 
-            return res.status(409).json({ message: 'La cédula ya está registrada.' });
+         if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') { 
+            return res.status(409).json({ message: 'La cédula ya está registrada por otro estudiante.' });
         }
         res.status(500).json({ message: 'Error al registrar el estudiante' });
     }
@@ -156,9 +156,9 @@ app.delete('/api/estudiantes/:id', auth('admin'), async (req, res) => {
     const { id } = req.params;
     try {
         // Primero, eliminar las notas asociadas para evitar errores de foreign key
-        await db.query('DELETE FROM notas WHERE id_estudiante = $1', [id]);
+        await db.query('DELETE FROM notas WHERE id_estudiante = ?', [id]);
         // Luego, eliminar al estudiante
-        const result = await db.query('DELETE FROM estudiantes WHERE id = $1', [id]);
+        const result = await db.query('DELETE FROM estudiantes WHERE id = ?', [id]);
         
         if (result.rowCount === 0) {
             return res.status(404).json({ message: 'Estudiante no encontrado.' });
@@ -175,12 +175,12 @@ app.delete('/api/representantes/:id', auth('admin'), async (req, res) => {
     const { id } = req.params;
     try {
         // Verificar si el representante tiene estudiantes a su cargo
-        const estudiantes = await db.query('SELECT id FROM estudiantes WHERE id_representante = $1', [id]);
+        const estudiantes = await db.query('SELECT id FROM estudiantes WHERE id_representante = ?', [id]);
         if (estudiantes.rows.length > 0) {
             return res.status(400).json({ message: 'No se puede eliminar. El representante tiene estudiantes asignados.' });
         }
         
-        const result = await db.query('DELETE FROM representantes WHERE id = $1', [id]);
+        const result = await db.query('DELETE FROM representantes WHERE id = ?', [id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ message: 'Representante no encontrado.' });
         }
@@ -201,7 +201,7 @@ app.put('/api/representantes/:id', auth('admin'), async (req, res) => {
     }
     try {
         const result = await db.query(
-            'UPDATE representantes SET nombre = $1, email = $2 WHERE id = $3 RETURNING *',
+            'UPDATE representantes SET nombre = ?, email = ? WHERE id = ? RETURNING *',
             [nombre, email, id]
         );
         if (result.rowCount === 0) {
@@ -210,7 +210,7 @@ app.put('/api/representantes/:id', auth('admin'), async (req, res) => {
         res.json(result.rows[0]);
     } catch (err) {
         console.error(err);
-        if (err.code === '23505') {
+        if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
             return res.status(409).json({ message: 'El correo electrónico ya está en uso por otro representante.' });
         }
         res.status(500).json({ message: 'Error al actualizar el representante.' });
@@ -221,13 +221,13 @@ app.put('/api/representantes/:id', auth('admin'), async (req, res) => {
 app.put('/api/estudiantes/:id', auth('admin'), async (req, res) => {
     const { id } = req.params;
     const { nombre, cedula, grado } = req.body; // Solo se pueden editar estos campos
-    if (!nombre || !cedula || !grado) {
-        return res.status(400).json({ message: 'Nombre, cédula y grado son obligatorios.' });
+    if (!nombre || !grado) {
+        return res.status(400).json({ message: 'Nombre y grado son obligatorios.' });
     }
     try {
         const result = await db.query(
-            'UPDATE estudiantes SET nombre = $1, cedula = $2, grado = $3 WHERE id = $4 RETURNING *',
-            [nombre, cedula, grado, id]
+            'UPDATE estudiantes SET nombre = ?, cedula = ?, grado = ? WHERE id = ? RETURNING *',
+            [nombre, cedula || null, grado, id]
         );
         if (result.rowCount === 0) {
             return res.status(404).json({ message: 'Estudiante no encontrado.' });
@@ -235,7 +235,7 @@ app.put('/api/estudiantes/:id', auth('admin'), async (req, res) => {
         res.json(result.rows[0]);
     } catch (err) {
         console.error(err);
-        if (err.code === '23505') {
+        if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
             return res.status(409).json({ message: 'La cédula ya está en uso por otro estudiante.' });
         }
         res.status(500).json({ message: 'Error al actualizar el estudiante.' });
@@ -265,14 +265,14 @@ app.post('/api/notas', auth('admin'), async (req, res) => {
         return res.status(400).json({ message: 'Todos los campos son obligatorios.' });
     }
     try {
-        const estudianteResult = await db.query('SELECT id FROM estudiantes WHERE carnet = $1', [carnet_estudiante]);
+        const estudianteResult = await db.query('SELECT id FROM estudiantes WHERE carnet = ?', [carnet_estudiante]);
         if (estudianteResult.rows.length === 0) {
             return res.status(404).json({ message: 'No se encontró ningún estudiante con ese carnet.' });
         }
         const id_estudiante = estudianteResult.rows[0].id;
 
         const result = await db.query(
-            'INSERT INTO notas (id_estudiante, materia, calificacion, periodo) VALUES ($1, $2, $3, $4) RETURNING *',
+            'INSERT INTO notas (id_estudiante, materia, calificacion, periodo) VALUES (?, ?, ?, ?) RETURNING *',
             [id_estudiante, materia, calificacion, periodo]
         );
         res.status(201).json(result.rows[0]);
@@ -290,10 +290,10 @@ app.get('/api/representante/dashboard', auth('representante'), async (req, res) 
         const id_representante = req.session.user.id;
         
         // Obtener datos del representante
-        const repResult = await db.query('SELECT nombre, email FROM representantes WHERE id = $1', [id_representante]);
+        const repResult = await db.query('SELECT nombre, email FROM representantes WHERE id = ?', [id_representante]);
         
         // Obtener la lista de hijos
-        const hijosResult = await db.query('SELECT id, carnet, nombre, cedula, fecha_nacimiento, grado FROM estudiantes WHERE id_representante = $1 ORDER BY nombre', [id_representante]);
+        const hijosResult = await db.query('SELECT id, carnet, nombre, cedula, fecha_nacimiento, grado FROM estudiantes WHERE id_representante = ? ORDER BY nombre', [id_representante]);
 
         if (repResult.rows.length === 0) {
             return res.status(404).json({ message: 'Representante no encontrado.' });
@@ -317,12 +317,12 @@ app.get('/api/estudiante/:id/notas', auth('representante'), async (req, res) => 
         const id_representante = req.session.user.id;
 
         // Verificar que el representante solo pueda ver las notas de sus propios hijos
-        const verificacion = await db.query('SELECT id FROM estudiantes WHERE id = $1 AND id_representante = $2', [id, id_representante]);
+        const verificacion = await db.query('SELECT id FROM estudiantes WHERE id = ? AND id_representante = ?', [id, id_representante]);
         if (verificacion.rows.length === 0) {
             return res.status(403).json({ message: 'No tiene permiso para ver las notas de este estudiante.' });
         }
 
-        const notasResult = await db.query('SELECT materia, calificacion, periodo FROM notas WHERE id_estudiante = $1 ORDER BY periodo, materia', [id]);
+        const notasResult = await db.query('SELECT materia, calificacion, periodo FROM notas WHERE id_estudiante = ? ORDER BY periodo, materia', [id]);
         res.json(notasResult.rows);
 
     } catch (err) {
@@ -356,7 +356,7 @@ app.get('/api/representante/pagos', auth('representante'), async (req, res) => {
                 p.concepto
             FROM estudiantes e
             LEFT JOIN pagos p ON e.id = p.id_estudiante
-            WHERE e.id_representante = $1
+            WHERE e.id_representante = ?
             ORDER BY e.nombre, p.año DESC, p.mes DESC
         `, [id_representante]);
 
@@ -410,7 +410,7 @@ app.post('/api/admin/generar-mensualidades', auth('admin'), async (req, res) => 
         }
 
         // Verificar que el estudiante existe
-        const estudianteExiste = await db.query('SELECT id, nombre FROM estudiantes WHERE id = $1', [estudiante_id]);
+        const estudianteExiste = await db.query('SELECT id, nombre FROM estudiantes WHERE id = ?', [estudiante_id]);
         if (estudianteExiste.rows.length === 0) {
             return res.status(404).json({ message: 'Estudiante no encontrado.' });
         }
@@ -425,14 +425,14 @@ app.post('/api/admin/generar-mensualidades', auth('admin'), async (req, res) => 
         for (let mes of mesesEscolares) {
             try {
                 // Verificar si ya existe
-                const existe = await db.query('SELECT id FROM pagos WHERE id_estudiante = $1 AND mes = $2 AND año = $3', [estudiante_id, mes, año]);
+                const existe = await db.query('SELECT id FROM pagos WHERE id_estudiante = ? AND mes = ? AND año = ?', [estudiante_id, mes, año]);
                 if (existe.rows.length === 0) {
                     // Calcular fecha de vencimiento (último día del mes)
                     const fechaVencimiento = new Date(año, mes, 0);
                     
                     await db.query(`
                         INSERT INTO pagos (id_estudiante, mes, año, monto, estado, fecha_vencimiento)
-                        VALUES ($1, $2, $3, $4, 'pendiente', $5)
+                        VALUES (?, ?, ?, ?, 'pendiente', ?)
                     `, [estudiante_id, mes, año, 12480.00, fechaVencimiento]);
                     
                     mensualidadesGeneradas++;
@@ -564,13 +564,13 @@ app.post('/api/representante/pagos', auth('representante'), async (req, res) => 
         }
 
         // Verificar que el estudiante pertenece al representante
-        const verificacion = await db.query('SELECT id FROM estudiantes WHERE id = $1 AND id_representante = $2', [estudiante_id, id_representante]);
+        const verificacion = await db.query('SELECT id FROM estudiantes WHERE id = ? AND id_representante = ?', [estudiante_id, id_representante]);
         if (verificacion.rows.length === 0) {
             return res.status(403).json({ message: 'No tiene permiso para realizar pagos para este estudiante.' });
         }
 
         // Verificar si ya existe un pago para ese mes/año y su estado
-        const pagoExistente = await db.query('SELECT id, estado FROM pagos WHERE id_estudiante = $1 AND mes = $2 AND año = $3', [estudiante_id, mes, año]);
+        const pagoExistente = await db.query('SELECT id, estado FROM pagos WHERE id_estudiante = ? AND mes = ? AND año = ?', [estudiante_id, mes, año]);
         
         if (pagoExistente.rows.length === 0) {
             return res.status(404).json({ message: 'No se encontró una mensualidad pendiente para este mes. El administrador debe generar las mensualidades primero.' });
@@ -586,15 +586,15 @@ app.post('/api/representante/pagos', auth('representante'), async (req, res) => 
         const result = await db.query(`
             UPDATE pagos 
             SET estado = 'pagado', fecha_pago = CURRENT_DATE
-            WHERE id = $1
+            WHERE id = ?
             RETURNING *
         `, [pago.id]);
 
         const pagoActualizado = result.rows[0];
 
         // Obtener datos del estudiante y representante para la factura
-        const estudianteResult = await db.query('SELECT * FROM estudiantes WHERE id = $1', [estudiante_id]);
-        const representanteResult = await db.query('SELECT * FROM representantes WHERE id = $1', [id_representante]);
+        const estudianteResult = await db.query('SELECT * FROM estudiantes WHERE id = ?', [estudiante_id]);
+        const representanteResult = await db.query('SELECT * FROM representantes WHERE id = ?', [id_representante]);
 
         const estudiante = estudianteResult.rows[0];
         const representante = representanteResult.rows[0];
@@ -618,7 +618,7 @@ app.post('/api/representante/pagos', auth('representante'), async (req, res) => 
 app.get('/api/admin/estudiantes/:id/notas', auth('admin'), async (req, res) => {
     const { id } = req.params;
     try {
-        const notasResult = await db.query('SELECT id, materia, calificacion, periodo FROM notas WHERE id_estudiante = $1 ORDER BY periodo, materia', [id]);
+        const notasResult = await db.query('SELECT id, materia, calificacion, periodo FROM notas WHERE id_estudiante = ? ORDER BY periodo, materia', [id]);
         res.json(notasResult.rows);
     } catch (err) {
         console.error(err);
@@ -635,7 +635,7 @@ app.put('/api/notas/:id', auth('admin'), async (req, res) => {
     }
     try {
         const result = await db.query(
-            'UPDATE notas SET materia = $1, calificacion = $2, periodo = $3 WHERE id = $4 RETURNING *',
+            'UPDATE notas SET materia = ?, calificacion = ?, periodo = ? WHERE id = ? RETURNING *',
             [materia, calificacion, periodo, id]
         );
         if (result.rowCount === 0) {
@@ -652,7 +652,7 @@ app.put('/api/notas/:id', auth('admin'), async (req, res) => {
 app.delete('/api/notas/:id', auth('admin'), async (req, res) => {
     const { id } = req.params;
     try {
-        const result = await db.query('DELETE FROM notas WHERE id = $1', [id]);
+        const result = await db.query('DELETE FROM notas WHERE id = ?', [id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ message: 'Nota no encontrada.' });
         }

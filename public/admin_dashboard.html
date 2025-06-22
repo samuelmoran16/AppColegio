@@ -77,20 +77,6 @@
                                 </div>
                                 <div class="col-md-6">
                                     <div class="mb-3">
-                                        <label for="est-cedula" class="form-label">Cédula de Identidad</label>
-                                        <input type="text" class="form-control" id="est-cedula" required>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="row">
-                                <div class="col-md-4">
-                                    <div class="mb-3">
-                                        <label for="est-fecha-nacimiento" class="form-label">Fecha de Nacimiento</label>
-                                        <input type="date" class="form-control" id="est-fecha-nacimiento">
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="mb-3">
                                         <label for="est-grado" class="form-label">Grado</label>
                                         <select class="form-select" id="est-grado" required>
                                             <option value="">Seleccione un grado</option>
@@ -103,7 +89,15 @@
                                         </select>
                                     </div>
                                 </div>
-                                <div class="col-md-4">
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="est-fecha-nacimiento" class="form-label">Fecha de Nacimiento</label>
+                                        <input type="date" class="form-control" id="est-fecha-nacimiento">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
                                     <div class="mb-3">
                                         <label for="est-representante" class="form-label">Asignar a Representante</label>
                                         <select class="form-select" id="est-representante" required>
@@ -112,6 +106,44 @@
                                     </div>
                                 </div>
                             </div>
+                            
+                            <!-- Sección de Cédula -->
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0">¿El estudiante tiene cédula de identidad?</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="radio" name="tieneCedula" id="tieneCedulaSi" value="si">
+                                                <label class="form-check-label" for="tieneCedulaSi">
+                                                    Sí, tiene cédula
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="radio" name="tieneCedula" id="tieneCedulaNo" value="no" checked>
+                                                <label class="form-check-label" for="tieneCedulaNo">
+                                                    No, no tiene cédula
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Campo de cédula (inicialmente oculto) -->
+                                    <div id="campo-cedula" class="mt-3" style="display: none;">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <label for="est-cedula" class="form-label">Cédula de Identidad</label>
+                                                <input type="text" class="form-control" id="est-cedula" placeholder="Ingrese la cédula">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
                             <button type="submit" class="btn btn-success">Registrar Estudiante</button>
                         </form>
                     </div>
@@ -297,7 +329,7 @@
                         li.innerHTML = `
                             <div>
                                 <strong>${est.nombre}</strong><br>
-                                <small class="text-muted">Carnet: ${est.carnet} | C.I: ${est.cedula} | Grado: ${est.grado}</small>
+                                <small class="text-muted">Carnet: ${est.carnet} | C.I: ${est.cedula || 'Sin cédula'} | Grado: ${est.grado}</small>
                             </div>
                             <div>
                                 <button class="btn btn-secondary btn-sm me-2" onclick='abrirModalGestionarNotas(${est.id}, "${est.nombre}")'>Notas</button>
@@ -382,9 +414,20 @@
         // Evento para registrar estudiante
         formEstudiante.addEventListener('submit', async (e) => {
              e.preventDefault();
+            
+            // Obtener la selección de cédula
+            const tieneCedula = document.querySelector('input[name="tieneCedula"]:checked').value;
+            const cedulaValue = document.getElementById('est-cedula').value;
+            
+            // Validar que si seleccionó "Sí", debe proporcionar la cédula
+            if (tieneCedula === 'si' && !cedulaValue.trim()) {
+                showAlert('Si el estudiante tiene cédula, debe proporcionarla.', 'warning');
+                return;
+            }
+            
             const body = {
                 nombre: document.getElementById('est-nombre').value,
-                cedula: document.getElementById('est-cedula').value,
+                cedula: tieneCedula === 'si' ? cedulaValue : null,
                 fecha_nacimiento: document.getElementById('est-fecha-nacimiento').value,
                 grado: document.getElementById('est-grado').value,
                 id_representante: document.getElementById('est-representante').value
@@ -401,6 +444,12 @@
 
                 showAlert('Estudiante registrado con éxito.');
                 formEstudiante.reset();
+                
+                // Resetear la selección de cédula
+                document.getElementById('tieneCedulaNo').checked = true;
+                document.getElementById('campo-cedula').style.display = 'none';
+                document.getElementById('est-cedula').required = false;
+                
                 cargarEstudiantes(); // Recargar la lista de estudiantes
             } catch (error) {
                 showAlert(error.message, 'danger');
@@ -469,7 +518,34 @@
         document.addEventListener('DOMContentLoaded', () => {
             cargarRepresentantes();
             cargarEstudiantes();
+            
+            // Configurar eventos para el manejo de cédula
+            configurarCedulaEvents();
         });
+
+        // Función para configurar eventos de cédula
+        function configurarCedulaEvents() {
+            const tieneCedulaSi = document.getElementById('tieneCedulaSi');
+            const tieneCedulaNo = document.getElementById('tieneCedulaNo');
+            const campoCedula = document.getElementById('campo-cedula');
+            const inputCedula = document.getElementById('est-cedula');
+
+            // Evento para mostrar/ocultar campo de cédula
+            tieneCedulaSi.addEventListener('change', () => {
+                if (tieneCedulaSi.checked) {
+                    campoCedula.style.display = 'block';
+                    inputCedula.required = true;
+                }
+            });
+
+            tieneCedulaNo.addEventListener('change', () => {
+                if (tieneCedulaNo.checked) {
+                    campoCedula.style.display = 'none';
+                    inputCedula.required = false;
+                    inputCedula.value = '';
+                }
+            });
+        }
 
         // Función para generar mensualidades
         async function generarMensualidades() {
@@ -584,8 +660,8 @@
                     <input type="text" id="edit-est-nombre" class="form-control" value="${estudiante.nombre}" required>
                 </div>
                 <div class="mb-3">
-                    <label for="edit-est-cedula" class="form-label">Cédula</label>
-                    <input type="text" id="edit-est-cedula" class="form-control" value="${estudiante.cedula}" required>
+                    <label for="edit-est-cedula" class="form-label">Cédula (opcional)</label>
+                    <input type="text" id="edit-est-cedula" class="form-control" value="${estudiante.cedula || ''}" placeholder="Dejar vacío si no tiene cédula">
                 </div>
                 <div class="mb-3">
                     <label for="edit-est-grado" class="form-label">Grado</label>
