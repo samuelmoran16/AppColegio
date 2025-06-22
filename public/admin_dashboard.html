@@ -131,8 +131,8 @@
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="mb-3">
-                                        <label for="nota-cedula-estudiante" class="form-label">Cédula del Estudiante</label>
-                                        <input type="text" class="form-control" id="nota-cedula-estudiante" required placeholder="Ingrese la cédula...">
+                                        <label for="nota-carnet-estudiante" class="form-label">Carnet del Estudiante</label>
+                                        <input type="text" class="form-control" id="nota-carnet-estudiante" required placeholder="Ingrese el carnet...">
                                     </div>
                                 </div>
                                 <div class="col-md-6">
@@ -296,7 +296,8 @@
                         li.className = 'list-group-item d-flex justify-content-between align-items-center';
                         li.innerHTML = `
                             <div>
-                                ${est.nombre} (C.I: ${est.cedula})
+                                <strong>${est.nombre}</strong><br>
+                                <small class="text-muted">Carnet: ${est.carnet} | C.I: ${est.cedula} | Grado: ${est.grado}</small>
                             </div>
                             <div>
                                 <button class="btn btn-secondary btn-sm me-2" onclick='abrirModalGestionarNotas(${est.id}, "${est.nombre}")'>Notas</button>
@@ -410,7 +411,7 @@
         formNota.addEventListener('submit', async (e) => {
             e.preventDefault();
             const body = {
-                cedula_estudiante: document.getElementById('nota-cedula-estudiante').value,
+                carnet_estudiante: document.getElementById('nota-carnet-estudiante').value,
                 materia: document.getElementById('nota-materia').value,
                 calificacion: document.getElementById('nota-calificacion').value,
                 periodo: document.getElementById('nota-periodo').value

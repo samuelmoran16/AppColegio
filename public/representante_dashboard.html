@@ -247,7 +247,7 @@
                     } else {
                         html += `
                             <span class="text-success me-2"><i class="bi bi-check-circle"></i> Completado</span>
-                            <a href="/facturas/factura_${estudiante.cedula}_${mesData.num}_${año}.pdf" target="_blank" class="btn btn-info btn-sm">
+                            <a href="/facturas/factura_${estudiante.carnet}_${mesData.num}_${año}.pdf" target="_blank" class="btn btn-info btn-sm">
                                 <i class="bi bi-file-pdf"></i> Ver Factura
                             </a>
                         `;
@@ -380,9 +380,9 @@
                                     <h5 class="card-title">${hijo.nombre}</h5>
                                     <h6 class="card-subtitle mb-2 text-muted">${hijo.grado}</h6>
                                     <p class="card-text">
-                                        Cédula: ${hijo.cedula || 'No registrada'}
-                                        <br>
-                                        Fecha de Nacimiento: ${hijo.fecha_nacimiento ? new Date(hijo.fecha_nacimiento).toLocaleDateString() : 'No registrada'}
+                                        <strong>Carnet:</strong> ${hijo.carnet}<br>
+                                        <strong>Cédula:</strong> ${hijo.cedula || 'No registrada'}<br>
+                                        <strong>Fecha de Nacimiento:</strong> ${hijo.fecha_nacimiento ? new Date(hijo.fecha_nacimiento).toLocaleDateString() : 'No registrada'}
                                     </p>
                                     <button class="btn btn-primary" onclick="verNotas(${hijo.id}, '${hijo.nombre}')">Ver Notas</button>
                                 </div>

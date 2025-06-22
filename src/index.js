@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 const session = require('express-session');
 const bodyParser = require('body-parser');
-const { db, initDB } = require('./db');
+const { db, initDB, generarCarnetUnico } = require('./db');
 const bcrypt = require('bcrypt');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
@@ -134,9 +134,12 @@ app.post('/api/estudiantes', auth('admin'), async (req, res) => {
         return res.status(400).json({ message: 'Nombre, Cédula, Grado y Representante son obligatorios.' });
     }
     try {
+        // Generar carnet único
+        const carnet = await generarCarnetUnico();
+        
         const result = await db.query(
-            'INSERT INTO estudiantes (nombre, cedula, fecha_nacimiento, grado, id_representante) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-            [nombre, cedula, fecha_nacimiento || null, grado, id_representante]
+            'INSERT INTO estudiantes (carnet, nombre, cedula, fecha_nacimiento, grado, id_representante) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+            [carnet, nombre, cedula, fecha_nacimiento || null, grado, id_representante]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -243,7 +246,7 @@ app.put('/api/estudiantes/:id', auth('admin'), async (req, res) => {
 app.get('/api/estudiantes', auth('admin'), async (req, res) => {
     try {
         const result = await db.query(`
-            SELECT e.id, e.nombre, e.cedula, e.grado, r.nombre as nombre_representante 
+            SELECT e.id, e.carnet, e.nombre, e.cedula, e.grado, r.nombre as nombre_representante 
             FROM estudiantes e 
             JOIN representantes r ON e.id_representante = r.id 
             ORDER BY e.nombre
@@ -257,14 +260,14 @@ app.get('/api/estudiantes', auth('admin'), async (req, res) => {
 
 // Registrar una nueva nota
 app.post('/api/notas', auth('admin'), async (req, res) => {
-    const { cedula_estudiante, materia, calificacion, periodo } = req.body;
-    if (!cedula_estudiante || !materia || !calificacion || !periodo) {
+    const { carnet_estudiante, materia, calificacion, periodo } = req.body;
+    if (!carnet_estudiante || !materia || !calificacion || !periodo) {
         return res.status(400).json({ message: 'Todos los campos son obligatorios.' });
     }
     try {
-        const estudianteResult = await db.query('SELECT id FROM estudiantes WHERE cedula = $1', [cedula_estudiante]);
+        const estudianteResult = await db.query('SELECT id FROM estudiantes WHERE carnet = $1', [carnet_estudiante]);
         if (estudianteResult.rows.length === 0) {
-            return res.status(404).json({ message: 'No se encontró ningún estudiante con esa cédula.' });
+            return res.status(404).json({ message: 'No se encontró ningún estudiante con ese carnet.' });
         }
         const id_estudiante = estudianteResult.rows[0].id;
 
@@ -290,7 +293,7 @@ app.get('/api/representante/dashboard', auth('representante'), async (req, res) 
         const repResult = await db.query('SELECT nombre, email FROM representantes WHERE id = $1', [id_representante]);
         
         // Obtener la lista de hijos
-        const hijosResult = await db.query('SELECT id, nombre, cedula, fecha_nacimiento, grado FROM estudiantes WHERE id_representante = $1 ORDER BY nombre', [id_representante]);
+        const hijosResult = await db.query('SELECT id, carnet, nombre, cedula, fecha_nacimiento, grado FROM estudiantes WHERE id_representante = $1 ORDER BY nombre', [id_representante]);
 
         if (repResult.rows.length === 0) {
             return res.status(404).json({ message: 'Representante no encontrado.' });
@@ -339,6 +342,7 @@ app.get('/api/representante/pagos', auth('representante'), async (req, res) => {
         const result = await db.query(`
             SELECT 
                 e.id as estudiante_id,
+                e.carnet as estudiante_carnet,
                 e.nombre as estudiante_nombre,
                 e.cedula as estudiante_cedula,
                 e.grado,
@@ -362,6 +366,7 @@ app.get('/api/representante/pagos', auth('representante'), async (req, res) => {
             if (!estudiantes[row.estudiante_id]) {
                 estudiantes[row.estudiante_id] = {
                     id: row.estudiante_id,
+                    carnet: row.estudiante_carnet,
                     nombre: row.estudiante_nombre,
                     cedula: row.estudiante_cedula,
                     grado: row.grado,
@@ -468,7 +473,7 @@ async function generarFacturaPDF(pago, estudiante, representante) {
     return new Promise((resolve, reject) => {
         try {
             const doc = new PDFDocument({ size: 'A4', margin: 50 });
-            const filename = `factura_${estudiante.cedula}_${pago.mes}_${pago.año}.pdf`;
+            const filename = `factura_${estudiante.carnet}_${pago.mes}_${pago.año}.pdf`;
             const filepath = path.join(__dirname, '..', 'public', 'facturas', filename);
             
             // Crear directorio si no existe
@@ -501,6 +506,7 @@ async function generarFacturaPDF(pago, estudiante, representante) {
             // Información del estudiante
             doc.fontSize(12).font('Helvetica-Bold').text('DATOS DEL ESTUDIANTE:');
             doc.fontSize(10).font('Helvetica').text(`Nombre: ${estudiante.nombre}`);
+            doc.text(`Carnet: ${estudiante.carnet}`);
             doc.text(`Cédula: ${estudiante.cedula}`);
             doc.text(`Grado: ${estudiante.grado}`);
             doc.moveDown();
