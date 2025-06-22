@@ -121,13 +121,18 @@ const initDB = async () => {
 
     // Insertar admin por defecto si no existe
     const adminEmail = 'admin@colegio.com';
-    const res = await pool.query('SELECT * FROM administradores WHERE email = ?', [adminEmail]);
+    const adminQuery = isProduction ? 
+        'SELECT * FROM administradores WHERE email = $1' : 
+        'SELECT * FROM administradores WHERE email = ?';
+    
+    const res = await pool.query(adminQuery, [adminEmail]);
     if (res.rowCount === 0) {
       const hash = await bcrypt.hash('admin123', 10);
-      await pool.query(
-        'INSERT INTO administradores (nombre, email, password) VALUES (?, ?, ?)',
-        ['Administrador', adminEmail, hash]
-      );
+      const insertQuery = isProduction ? 
+          'INSERT INTO administradores (nombre, email, password) VALUES ($1, $2, $3)' :
+          'INSERT INTO administradores (nombre, email, password) VALUES (?, ?, ?)';
+      
+      await pool.query(insertQuery, ['Administrador', adminEmail, hash]);
       console.log('Usuario administrador por defecto creado.');
     }
     
