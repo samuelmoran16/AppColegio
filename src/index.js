@@ -10,6 +10,24 @@ const fs = require('fs');
 const app = express();
 const port = 3000;
 
+// Función helper para manejar parámetros de consulta según la base de datos
+const getQueryParams = (params) => {
+    const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+    if (isProduction) {
+        // PostgreSQL usa $1, $2, etc.
+        return params.map((_, index) => `$${index + 1}`).join(', ');
+    } else {
+        // SQLite usa ?, ?, etc.
+        return params.map(() => '?').join(', ');
+    }
+};
+
+// Función helper para manejar códigos de error según la base de datos
+const getUniqueConstraintError = () => {
+    const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+    return isProduction ? '23505' : 'SQLITE_CONSTRAINT_UNIQUE';
+};
+
 // Inicializar DB
 initDB();
 
@@ -37,7 +55,12 @@ app.post('/login', async (req, res) => {
     }
     
     try {
-        const result = await db.query(`SELECT * FROM ${tableName} WHERE email = ?`, [email]);
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+        const query = isProduction ? 
+            `SELECT * FROM ${tableName} WHERE email = $1` : 
+            `SELECT * FROM ${tableName} WHERE email = ?`;
+        
+        const result = await db.query(query, [email]);
         const user = result.rows[0];
 
         if (!user) return res.status(401).send('Credenciales incorrectas');
@@ -113,14 +136,16 @@ app.post('/api/representantes', auth('admin'), async (req, res) => {
     }
     try {
         const hash = await bcrypt.hash(password, 10);
-        const result = await db.query(
-            'INSERT INTO representantes (nombre, email, password) VALUES (?, ?, ?) RETURNING id, nombre, email',
-            [nombre, email, hash]
-        );
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+        const query = isProduction ? 
+            'INSERT INTO representantes (nombre, email, password) VALUES ($1, $2, $3) RETURNING id, nombre, email' :
+            'INSERT INTO representantes (nombre, email, password) VALUES (?, ?, ?) RETURNING id, nombre, email';
+        
+        const result = await db.query(query, [nombre, email, hash]);
         res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error(err);
-        if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        if (err.code === getUniqueConstraintError()) {
             return res.status(409).json({ message: 'El correo electrónico ya está registrado.' });
         }
         res.status(500).json({ message: 'Error al registrar el representante' });
@@ -137,14 +162,16 @@ app.post('/api/estudiantes', auth('admin'), async (req, res) => {
         // Generar carnet único
         const carnet = await generarCarnetUnico();
         
-        const result = await db.query(
-            'INSERT INTO estudiantes (carnet, nombre, cedula, fecha_nacimiento, grado, id_representante) VALUES (?, ?, ?, ?, ?, ?) RETURNING *',
-            [carnet, nombre, cedula || null, fecha_nacimiento || null, grado, id_representante]
-        );
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+        const query = isProduction ? 
+            'INSERT INTO estudiantes (carnet, nombre, cedula, fecha_nacimiento, grado, id_representante) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *' :
+            'INSERT INTO estudiantes (carnet, nombre, cedula, fecha_nacimiento, grado, id_representante) VALUES (?, ?, ?, ?, ?, ?) RETURNING *';
+        
+        const result = await db.query(query, [carnet, nombre, cedula || null, fecha_nacimiento || null, grado, id_representante]);
         res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error(err);
-         if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') { 
+         if (err.code === getUniqueConstraintError()) { 
             return res.status(409).json({ message: 'La cédula ya está registrada por otro estudiante.' });
         }
         res.status(500).json({ message: 'Error al registrar el estudiante' });
