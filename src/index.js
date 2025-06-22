@@ -182,10 +182,25 @@ app.post('/api/estudiantes', auth('admin'), async (req, res) => {
 app.delete('/api/estudiantes/:id', auth('admin'), async (req, res) => {
     const { id } = req.params;
     try {
-        // Primero, eliminar las notas asociadas para evitar errores de foreign key
-        await db.query('DELETE FROM notas WHERE id_estudiante = ?', [id]);
-        // Luego, eliminar al estudiante
-        const result = await db.query('DELETE FROM estudiantes WHERE id = ?', [id]);
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+        
+        // Primero, eliminar los pagos asociados
+        const deletePagosQuery = isProduction ? 
+            'DELETE FROM pagos WHERE id_estudiante = $1' : 
+            'DELETE FROM pagos WHERE id_estudiante = ?';
+        await db.query(deletePagosQuery, [id]);
+        
+        // Luego, eliminar las notas asociadas
+        const deleteNotasQuery = isProduction ? 
+            'DELETE FROM notas WHERE id_estudiante = $1' : 
+            'DELETE FROM notas WHERE id_estudiante = ?';
+        await db.query(deleteNotasQuery, [id]);
+        
+        // Finalmente, eliminar al estudiante
+        const deleteEstudianteQuery = isProduction ? 
+            'DELETE FROM estudiantes WHERE id = $1' : 
+            'DELETE FROM estudiantes WHERE id = ?';
+        const result = await db.query(deleteEstudianteQuery, [id]);
         
         if (result.rowCount === 0) {
             return res.status(404).json({ message: 'Estudiante no encontrado.' });
@@ -201,13 +216,23 @@ app.delete('/api/estudiantes/:id', auth('admin'), async (req, res) => {
 app.delete('/api/representantes/:id', auth('admin'), async (req, res) => {
     const { id } = req.params;
     try {
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+        
         // Verificar si el representante tiene estudiantes a su cargo
-        const estudiantes = await db.query('SELECT id FROM estudiantes WHERE id_representante = ?', [id]);
+        const estudiantesQuery = isProduction ? 
+            'SELECT id FROM estudiantes WHERE id_representante = $1' : 
+            'SELECT id FROM estudiantes WHERE id_representante = ?';
+        const estudiantes = await db.query(estudiantesQuery, [id]);
+        
         if (estudiantes.rows.length > 0) {
             return res.status(400).json({ message: 'No se puede eliminar. El representante tiene estudiantes asignados.' });
         }
         
-        const result = await db.query('DELETE FROM representantes WHERE id = ?', [id]);
+        const deleteQuery = isProduction ? 
+            'DELETE FROM representantes WHERE id = $1' : 
+            'DELETE FROM representantes WHERE id = ?';
+        const result = await db.query(deleteQuery, [id]);
+        
         if (result.rowCount === 0) {
             return res.status(404).json({ message: 'Representante no encontrado.' });
         }
@@ -227,17 +252,19 @@ app.put('/api/representantes/:id', auth('admin'), async (req, res) => {
         return res.status(400).json({ message: 'Nombre y email son obligatorios.' });
     }
     try {
-        const result = await db.query(
-            'UPDATE representantes SET nombre = ?, email = ? WHERE id = ? RETURNING *',
-            [nombre, email, id]
-        );
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+        const query = isProduction ? 
+            'UPDATE representantes SET nombre = $1, email = $2 WHERE id = $3 RETURNING *' :
+            'UPDATE representantes SET nombre = ?, email = ? WHERE id = ? RETURNING *';
+        
+        const result = await db.query(query, [nombre, email, id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ message: 'Representante no encontrado.' });
         }
         res.json(result.rows[0]);
     } catch (err) {
         console.error(err);
-        if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        if (err.code === getUniqueConstraintError()) {
             return res.status(409).json({ message: 'El correo electrónico ya está en uso por otro representante.' });
         }
         res.status(500).json({ message: 'Error al actualizar el representante.' });
@@ -252,17 +279,19 @@ app.put('/api/estudiantes/:id', auth('admin'), async (req, res) => {
         return res.status(400).json({ message: 'Nombre y grado son obligatorios.' });
     }
     try {
-        const result = await db.query(
-            'UPDATE estudiantes SET nombre = ?, cedula = ?, grado = ? WHERE id = ? RETURNING *',
-            [nombre, cedula || null, grado, id]
-        );
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+        const query = isProduction ? 
+            'UPDATE estudiantes SET nombre = $1, cedula = $2, grado = $3 WHERE id = $4 RETURNING *' :
+            'UPDATE estudiantes SET nombre = ?, cedula = ?, grado = ? WHERE id = ? RETURNING *';
+        
+        const result = await db.query(query, [nombre, cedula || null, grado, id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ message: 'Estudiante no encontrado.' });
         }
         res.json(result.rows[0]);
     } catch (err) {
         console.error(err);
-        if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        if (err.code === getUniqueConstraintError()) {
             return res.status(409).json({ message: 'La cédula ya está en uso por otro estudiante.' });
         }
         res.status(500).json({ message: 'Error al actualizar el estudiante.' });
@@ -292,16 +321,23 @@ app.post('/api/notas', auth('admin'), async (req, res) => {
         return res.status(400).json({ message: 'Todos los campos son obligatorios.' });
     }
     try {
-        const estudianteResult = await db.query('SELECT id FROM estudiantes WHERE carnet = ?', [carnet_estudiante]);
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+        
+        const estudianteQuery = isProduction ? 
+            'SELECT id FROM estudiantes WHERE carnet = $1' : 
+            'SELECT id FROM estudiantes WHERE carnet = ?';
+        const estudianteResult = await db.query(estudianteQuery, [carnet_estudiante]);
+        
         if (estudianteResult.rows.length === 0) {
             return res.status(404).json({ message: 'No se encontró ningún estudiante con ese carnet.' });
         }
         const id_estudiante = estudianteResult.rows[0].id;
 
-        const result = await db.query(
-            'INSERT INTO notas (id_estudiante, materia, calificacion, periodo) VALUES (?, ?, ?, ?) RETURNING *',
-            [id_estudiante, materia, calificacion, periodo]
-        );
+        const insertQuery = isProduction ? 
+            'INSERT INTO notas (id_estudiante, materia, calificacion, periodo) VALUES ($1, $2, $3, $4) RETURNING *' :
+            'INSERT INTO notas (id_estudiante, materia, calificacion, periodo) VALUES (?, ?, ?, ?) RETURNING *';
+        
+        const result = await db.query(insertQuery, [id_estudiante, materia, calificacion, periodo]);
         res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error(err);
@@ -315,12 +351,19 @@ app.post('/api/notas', auth('admin'), async (req, res) => {
 app.get('/api/representante/dashboard', auth('representante'), async (req, res) => {
     try {
         const id_representante = req.session.user.id;
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
         
         // Obtener datos del representante
-        const repResult = await db.query('SELECT nombre, email FROM representantes WHERE id = ?', [id_representante]);
+        const repQuery = isProduction ? 
+            'SELECT nombre, email FROM representantes WHERE id = $1' : 
+            'SELECT nombre, email FROM representantes WHERE id = ?';
+        const repResult = await db.query(repQuery, [id_representante]);
         
         // Obtener la lista de hijos
-        const hijosResult = await db.query('SELECT id, carnet, nombre, cedula, fecha_nacimiento, grado FROM estudiantes WHERE id_representante = ? ORDER BY nombre', [id_representante]);
+        const hijosQuery = isProduction ? 
+            'SELECT id, carnet, nombre, cedula, fecha_nacimiento, grado FROM estudiantes WHERE id_representante = $1 ORDER BY nombre' : 
+            'SELECT id, carnet, nombre, cedula, fecha_nacimiento, grado FROM estudiantes WHERE id_representante = ? ORDER BY nombre';
+        const hijosResult = await db.query(hijosQuery, [id_representante]);
 
         if (repResult.rows.length === 0) {
             return res.status(404).json({ message: 'Representante no encontrado.' });
@@ -342,14 +385,22 @@ app.get('/api/estudiante/:id/notas', auth('representante'), async (req, res) => 
     try {
         const { id } = req.params;
         const id_representante = req.session.user.id;
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
 
         // Verificar que el representante solo pueda ver las notas de sus propios hijos
-        const verificacion = await db.query('SELECT id FROM estudiantes WHERE id = ? AND id_representante = ?', [id, id_representante]);
+        const verificacionQuery = isProduction ? 
+            'SELECT id FROM estudiantes WHERE id = $1 AND id_representante = $2' : 
+            'SELECT id FROM estudiantes WHERE id = ? AND id_representante = ?';
+        const verificacion = await db.query(verificacionQuery, [id, id_representante]);
+        
         if (verificacion.rows.length === 0) {
             return res.status(403).json({ message: 'No tiene permiso para ver las notas de este estudiante.' });
         }
 
-        const notasResult = await db.query('SELECT materia, calificacion, periodo FROM notas WHERE id_estudiante = ? ORDER BY periodo, materia', [id]);
+        const notasQuery = isProduction ? 
+            'SELECT materia, calificacion, periodo FROM notas WHERE id_estudiante = $1 ORDER BY periodo, materia' : 
+            'SELECT materia, calificacion, periodo FROM notas WHERE id_estudiante = ? ORDER BY periodo, materia';
+        const notasResult = await db.query(notasQuery, [id]);
         res.json(notasResult.rows);
 
     } catch (err) {
