@@ -33,19 +33,26 @@
                     <div class="accordion-body">
                         <form id="form-registrar-representante">
                             <div class="row">
-                                <div class="col-md-4">
+                                <div class="col-md-3">
+                                    <div class="mb-3">
+                                        <label for="rep-cedula" class="form-label">Cédula de Identidad</label>
+                                        <input type="text" class="form-control" id="rep-cedula" required placeholder="8 dígitos" maxlength="8" pattern="[0-9]{8}">
+                                        <div class="form-text">Ingrese la cédula de 8 dígitos del representante.</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
                                     <div class="mb-3">
                                         <label for="rep-nombre" class="form-label">Nombre Completo</label>
                                         <input type="text" class="form-control" id="rep-nombre" required>
                                     </div>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <div class="mb-3">
                                         <label for="rep-email" class="form-label">Correo Electrónico</label>
                                         <input type="email" class="form-control" id="rep-email" required>
                                     </div>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <div class="mb-3">
                                         <label for="rep-password" class="form-label">Contraseña Temporal</label>
                                         <input type="password" class="form-control" id="rep-password" required>
@@ -54,15 +61,6 @@
                             </div>
                             <button type="submit" class="btn btn-primary">Registrar Representante</button>
                         </form>
-                        
-                        <!-- Área para mostrar la cédula generada -->
-                        <div id="cedula-generada" class="mt-3" style="display: none;">
-                            <div class="alert alert-success">
-                                <h6><i class="bi bi-check-circle"></i> Representante registrado exitosamente</h6>
-                                <p class="mb-1"><strong>Cédula asignada:</strong> <span id="cedula-asignada"></span></p>
-                                <small class="text-muted">Esta cédula es el identificador único del representante. Guárdela para registrar estudiantes.</small>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -395,30 +393,47 @@
         // Evento para registrar representante
         formRepresentante.addEventListener('submit', async (e) => {
             e.preventDefault();
+            
+            // Mostrar indicador de carga
+            const submitBtn = formRepresentante.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Registrando...';
+            submitBtn.disabled = true;
+            
             const body = {
+                cedula: document.getElementById('rep-cedula').value,
                 nombre: document.getElementById('rep-nombre').value,
                 email: document.getElementById('rep-email').value,
                 password: document.getElementById('rep-password').value
             };
 
             try {
+                console.log('Enviando datos del representante:', body);
+                
                 const response = await fetch('/api/representantes', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body)
                 });
+                
+                console.log('Respuesta del servidor:', response.status);
+                
                 const data = await response.json();
+                console.log('Datos recibidos:', data);
+                
                 if (!response.ok) throw new Error(data.message || response.statusText);
 
-                // Mostrar la cédula generada
-                document.getElementById('cedula-asignada').textContent = data.cedula;
-                document.getElementById('cedula-generada').style.display = 'block';
-                
-                showAlert('Representante registrado con éxito. Cédula asignada: ' + data.cedula);
+                showAlert('Representante registrado con éxito. Cédula: ' + data.cedula);
                 formRepresentante.reset();
                 cargarRepresentantes(); // Recargar la lista
+                
             } catch (error) {
+                console.error('Error al registrar representante:', error);
                 showAlert(error.message, 'danger');
+            } finally {
+                // Restaurar botón
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
             }
         });
         

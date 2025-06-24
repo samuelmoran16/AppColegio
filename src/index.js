@@ -130,13 +130,18 @@ app.get('/api/representantes', auth('admin'), async (req, res) => {
 
 // Registrar un nuevo representante
 app.post('/api/representantes', auth('admin'), async (req, res) => {
-    const { nombre, email, password } = req.body;
-    if (!nombre || !email || !password) {
+    const { cedula, nombre, email, password } = req.body;
+    if (!cedula || !nombre || !email || !password) {
         return res.status(400).json({ message: 'Todos los campos son obligatorios.' });
     }
+    
+    // Validar formato de cédula (8 dígitos)
+    if (!/^\d{8}$/.test(cedula)) {
+        return res.status(400).json({ message: 'La cédula debe tener exactamente 8 dígitos.' });
+    }
+    
     try {
         const hash = await bcrypt.hash(password, 10);
-        const cedula = await generarCedulaRepresentante();
         
         const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
         const query = isProduction ? 
@@ -148,7 +153,7 @@ app.post('/api/representantes', auth('admin'), async (req, res) => {
     } catch (err) {
         console.error(err);
         if (err.code === getUniqueConstraintError()) {
-            return res.status(409).json({ message: 'El correo electrónico ya está registrado.' });
+            return res.status(409).json({ message: 'La cédula o el correo electrónico ya están registrados.' });
         }
         res.status(500).json({ message: 'Error al registrar el representante' });
     }
