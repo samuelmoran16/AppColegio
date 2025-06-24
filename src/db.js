@@ -62,6 +62,16 @@ const initDB = async () => {
         password VARCHAR(255) NOT NULL
       )`);
 
+      await pool.query(`CREATE TABLE IF NOT EXISTS maestros (
+        id SERIAL PRIMARY KEY,
+        cedula VARCHAR(8) UNIQUE NOT NULL,
+        nombre VARCHAR(255) NOT NULL,
+        apellido VARCHAR(255) NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        grado_asignado VARCHAR(50) NOT NULL
+      )`);
+
       await pool.query(`CREATE TABLE IF NOT EXISTS estudiantes (
         id SERIAL PRIMARY KEY,
         carnet VARCHAR(20) UNIQUE NOT NULL,
@@ -76,8 +86,21 @@ const initDB = async () => {
         id SERIAL PRIMARY KEY,
         id_estudiante INTEGER REFERENCES estudiantes(id),
         materia VARCHAR(255) NOT NULL,
-        calificacion DECIMAL(4, 2) NOT NULL,
-        periodo VARCHAR(100) NOT NULL
+        calificacion VARCHAR(10) NOT NULL,
+        periodo VARCHAR(100) NOT NULL,
+        tipo_calificacion VARCHAR(10) DEFAULT 'numerica' CHECK (tipo_calificacion IN ('numerica', 'letra'))
+      )`);
+
+      await pool.query(`CREATE TABLE IF NOT EXISTS pagos (
+        id SERIAL PRIMARY KEY,
+        id_estudiante INTEGER REFERENCES estudiantes(id),
+        monto DECIMAL(10, 2) NOT NULL DEFAULT 12480.00,
+        mes INTEGER NOT NULL CHECK (mes >= 9 OR mes <= 8),
+        año INTEGER NOT NULL CHECK (año = 2025),
+        fecha_pago DATE,
+        estado VARCHAR(20) DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'pagado')),
+        fecha_vencimiento DATE NOT NULL,
+        concepto TEXT DEFAULT 'Mensualidad escolar'
       )`);
     } else {
       // SQLite - Desarrollo
@@ -96,6 +119,16 @@ const initDB = async () => {
         password TEXT NOT NULL
       )`);
 
+      await pool.query(`CREATE TABLE IF NOT EXISTS maestros (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cedula TEXT UNIQUE NOT NULL,
+        nombre TEXT NOT NULL,
+        apellido TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        grado_asignado TEXT NOT NULL
+      )`);
+
       await pool.query(`CREATE TABLE IF NOT EXISTS estudiantes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         carnet TEXT UNIQUE NOT NULL,
@@ -110,8 +143,21 @@ const initDB = async () => {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         id_estudiante INTEGER REFERENCES estudiantes(id),
         materia TEXT NOT NULL,
-        calificacion REAL NOT NULL,
-        periodo TEXT NOT NULL
+        calificacion TEXT NOT NULL,
+        periodo TEXT NOT NULL,
+        tipo_calificacion TEXT DEFAULT 'numerica' CHECK (tipo_calificacion IN ('numerica', 'letra'))
+      )`);
+
+      await pool.query(`CREATE TABLE IF NOT EXISTS pagos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id_estudiante INTEGER REFERENCES estudiantes(id),
+        monto REAL NOT NULL DEFAULT 12480.00,
+        mes INTEGER NOT NULL CHECK (mes >= 9 OR mes <= 8),
+        año INTEGER NOT NULL CHECK (año = 2025),
+        fecha_pago TEXT,
+        estado TEXT DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'pagado')),
+        fecha_vencimiento TEXT NOT NULL,
+        concepto TEXT DEFAULT 'Mensualidad escolar'
       )`);
     }
 
@@ -123,6 +169,9 @@ const initDB = async () => {
 
     // Migración de la tabla Estudiantes
     await migrarTablaEstudiantes();
+
+    // Migración de la tabla Notas
+    await migrarTablaNotas();
 
     // Insertar admin por defecto si no existe
     const adminEmail = 'admin@colegio.com';
@@ -653,6 +702,91 @@ const migrarRepresentanteEstudiante = async () => {
     }
   } catch (err) {
     console.error('Error migrando tabla de estudiantes para cedula_representante:', err);
+    throw err;
+  }
+};
+
+// Función para migrar la tabla de notas para soportar calificaciones con letras
+const migrarTablaNotas = async () => {
+  try {
+    const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+    
+    if (isProduction) {
+      // PostgreSQL - Verificar si la columna tipo_calificacion existe
+      const columns = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'notas' 
+        AND table_schema = 'public'
+      `);
+      
+      const columnNames = columns.rows.map(row => row.column_name);
+      
+      if (!columnNames.includes('tipo_calificacion')) {
+        console.log('Migrando tabla de notas para soportar calificaciones con letras...');
+        
+        // Añadir la columna tipo_calificacion
+        await pool.query('ALTER TABLE notas ADD COLUMN tipo_calificacion VARCHAR(10) DEFAULT \'numerica\'');
+        
+        // Cambiar el tipo de calificacion de DECIMAL a VARCHAR
+        await pool.query('ALTER TABLE notas ALTER COLUMN calificacion TYPE VARCHAR(10)');
+        
+        console.log('Tabla de notas migrada correctamente para soportar calificaciones con letras.');
+      } else {
+        console.log('Tabla de notas ya tiene soporte para calificaciones con letras.');
+      }
+    } else {
+      // SQLite - Recrear la tabla
+      const tableExists = await pool.query(`
+        SELECT name FROM sqlite_master WHERE type='table' AND name='notas'
+      `);
+
+      if (tableExists.rows.length > 0) {
+        const columns = await pool.query(`
+          PRAGMA table_info(notas)
+        `);
+        
+        const columnNames = columns.rows.map(row => row.name);
+        
+        if (!columnNames.includes('tipo_calificacion')) {
+          console.log('Migrando tabla de notas para soportar calificaciones con letras (recreando tabla en SQLite)...');
+          
+          // 1. Renombrar la tabla original
+          await pool.query('ALTER TABLE notas RENAME TO notas_old');
+          
+          // 2. Crear la nueva tabla con soporte para letras
+          await pool.query(`CREATE TABLE notas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_estudiante INTEGER REFERENCES estudiantes(id),
+            materia TEXT NOT NULL,
+            calificacion TEXT NOT NULL,
+            periodo TEXT NOT NULL,
+            tipo_calificacion TEXT DEFAULT 'numerica' CHECK (tipo_calificacion IN ('numerica', 'letra'))
+          )`);
+          
+          // 3. Copiar los datos de la tabla vieja a la nueva
+          const notas = await pool.query('SELECT id, id_estudiante, materia, calificacion, periodo FROM notas_old ORDER BY id');
+          for (let i = 0; i < notas.rows.length; i++) {
+            const nota = notas.rows[i];
+            await pool.query(
+              'INSERT INTO notas (id, id_estudiante, materia, calificacion, periodo, tipo_calificacion) VALUES (?, ?, ?, ?, ?, ?)',
+              [nota.id, nota.id_estudiante, nota.materia, nota.calificacion, nota.periodo, 'numerica']
+            );
+          }
+          
+          // 4. Eliminar la tabla vieja
+          await pool.query('DROP TABLE notas_old');
+          
+          console.log('Tabla de notas migrada correctamente para soportar calificaciones con letras.');
+        } else {
+          console.log('Tabla de notas ya tiene soporte para calificaciones con letras.');
+        }
+      } else {
+        console.log('Tabla de notas no existe, se creará con la nueva estructura.');
+      }
+    }
+  } catch (err) {
+    console.error('Error migrando tabla de notas:', err);
     throw err;
   }
 };

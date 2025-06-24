@@ -49,6 +49,7 @@ app.post('/login', async (req, res) => {
     let tableName = '';
     if (role === 'admin') tableName = 'administradores';
     if (role === 'representante') tableName = 'representantes';
+    if (role === 'maestro') tableName = 'maestros';
 
     if (!tableName) {
         return res.status(400).send('Rol no válido');
@@ -70,6 +71,8 @@ app.post('/login', async (req, res) => {
             req.session.user = { id: user.id, email: user.email, role: role };
             if (role === 'admin') {
                 res.redirect('/admin/dashboard');
+            } else if (role === 'maestro') {
+                res.redirect('/maestro/dashboard');
             } else {
                 res.redirect('/representante/dashboard');
             }
@@ -115,6 +118,10 @@ app.get('/representante/dashboard', auth('representante'), (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'public', 'representante_dashboard.html'));
 });
 
+app.get('/maestro/dashboard', auth('maestro'), (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', 'maestro_dashboard.html'));
+});
+
 // --- API para Administrador ---
 
 // Obtener todos los representantes
@@ -125,6 +132,17 @@ app.get('/api/representantes', auth('admin'), async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Error al obtener los representantes' });
+    }
+});
+
+// Obtener todos los maestros
+app.get('/api/maestros', auth('admin'), async (req, res) => {
+    try {
+        const result = await db.query('SELECT id, cedula, nombre, apellido, email, grado_asignado FROM maestros ORDER BY nombre');
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al obtener los maestros' });
     }
 });
 
@@ -404,27 +422,110 @@ app.get('/api/estudiante/:id/notas', auth('representante'), async (req, res) => 
         const id_representante = req.session.user.id;
         const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
 
+        // Obtener la cédula del representante
+        const cedulaQuery = isProduction ? 
+            'SELECT cedula FROM representantes WHERE id = $1' : 
+            'SELECT cedula FROM representantes WHERE id = ?';
+        const cedulaResult = await db.query(cedulaQuery, [id_representante]);
+        
+        if (cedulaResult.rows.length === 0) {
+            return res.status(404).json({ message: 'Representante no encontrado.' });
+        }
+        
+        const cedula_representante = cedulaResult.rows[0].cedula;
+
         // Verificar que el representante solo pueda ver las notas de sus propios hijos
         const verificacionQuery = isProduction ? 
-            'SELECT id FROM estudiantes WHERE id = $1 AND id_representante = $2' : 
-            'SELECT id FROM estudiantes WHERE id = ? AND id_representante = ?';
-        const verificacion = await db.query(verificacionQuery, [id, id_representante]);
+            'SELECT id FROM estudiantes WHERE id = $1 AND cedula_representante = $2' : 
+            'SELECT id FROM estudiantes WHERE id = ? AND cedula_representante = ?';
+        const verificacion = await db.query(verificacionQuery, [id, cedula_representante]);
         
         if (verificacion.rows.length === 0) {
             return res.status(403).json({ message: 'No tiene permiso para ver las notas de este estudiante.' });
         }
 
         const notasQuery = isProduction ? 
-            'SELECT materia, calificacion, periodo FROM notas WHERE id_estudiante = $1 ORDER BY periodo, materia' : 
-            'SELECT materia, calificacion, periodo FROM notas WHERE id_estudiante = ? ORDER BY periodo, materia';
+            'SELECT materia, calificacion, periodo, tipo_calificacion FROM notas WHERE id_estudiante = $1 ORDER BY periodo, materia' : 
+            'SELECT materia, calificacion, periodo, tipo_calificacion FROM notas WHERE id_estudiante = ? ORDER BY periodo, materia';
         const notasResult = await db.query(notasQuery, [id]);
-        res.json(notasResult.rows);
+        
+        // Calcular promedios
+        const notas = notasResult.rows;
+        const promedios = calcularPromedios(notas);
+        
+        res.json({
+            notas: notas,
+            promedios: promedios
+        });
 
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Error al obtener las notas.' });
     }
 });
+
+// Función para calcular promedios
+function calcularPromedios(notas) {
+    const promediosPorMateria = {};
+    let totalNumerico = 0;
+    let totalLetras = 0;
+    let contadorNumerico = 0;
+    let contadorLetras = 0;
+    
+    notas.forEach(nota => {
+        if (!promediosPorMateria[nota.materia]) {
+            promediosPorMateria[nota.materia] = {
+                calificaciones: [],
+                promedio: 0,
+                tipo: nota.tipo_calificacion
+            };
+        }
+        
+        promediosPorMateria[nota.materia].calificaciones.push(nota.calificacion);
+        
+        if (nota.tipo_calificacion === 'numerica') {
+            const calificacionNum = parseFloat(nota.calificacion);
+            if (!isNaN(calificacionNum)) {
+                totalNumerico += calificacionNum;
+                contadorNumerico++;
+            }
+        } else if (nota.tipo_calificacion === 'letra') {
+            totalLetras++;
+            contadorLetras++;
+        }
+    });
+    
+    // Calcular promedio por materia
+    Object.keys(promediosPorMateria).forEach(materia => {
+        const materiaData = promediosPorMateria[materia];
+        if (materiaData.tipo === 'numerica') {
+            const calificacionesNum = materiaData.calificaciones.map(c => parseFloat(c)).filter(c => !isNaN(c));
+            materiaData.promedio = calificacionesNum.length > 0 ? 
+                (calificacionesNum.reduce((a, b) => a + b, 0) / calificacionesNum.length).toFixed(2) : 0;
+        } else {
+            // Para letras, contar A=3, B=2, C=1
+            const valores = materiaData.calificaciones.map(c => {
+                switch(c.toUpperCase()) {
+                    case 'A': return 3;
+                    case 'B': return 2;
+                    case 'C': return 1;
+                    default: return 0;
+                }
+            });
+            const promedioLetras = valores.reduce((a, b) => a + b, 0) / valores.length;
+            materiaData.promedio = promedioLetras > 0 ? promedioLetras.toFixed(2) : 0;
+        }
+    });
+    
+    // Calcular promedio total
+    const promedioTotal = contadorNumerico > 0 ? (totalNumerico / contadorNumerico).toFixed(2) : 0;
+    
+    return {
+        porMateria: promediosPorMateria,
+        total: promedioTotal,
+        tipo: contadorNumerico > 0 ? 'numerica' : 'letra'
+    };
+}
 
 // --- API para Pagos de Mensualidad ---
 
@@ -768,6 +869,176 @@ app.delete('/api/notas/:id', auth('admin'), async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Error al eliminar la nota.' });
+    }
+});
+
+// Registrar un nuevo maestro
+app.post('/api/maestros', auth('admin'), async (req, res) => {
+    const { cedula, nombre, apellido, email, password, grado_asignado } = req.body;
+    if (!cedula || !nombre || !apellido || !email || !password || !grado_asignado) {
+        return res.status(400).json({ message: 'Todos los campos son obligatorios.' });
+    }
+    
+    // Validar formato de cédula (8 dígitos)
+    if (!/^\d{8}$/.test(cedula)) {
+        return res.status(400).json({ message: 'La cédula debe tener exactamente 8 dígitos.' });
+    }
+    
+    try {
+        const hash = await bcrypt.hash(password, 10);
+        
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+        const query = isProduction ? 
+            'INSERT INTO maestros (cedula, nombre, apellido, email, password, grado_asignado) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, cedula, nombre, apellido, email, grado_asignado' :
+            'INSERT INTO maestros (cedula, nombre, apellido, email, password, grado_asignado) VALUES (?, ?, ?, ?, ?, ?) RETURNING id, cedula, nombre, apellido, email, grado_asignado';
+        
+        const result = await db.query(query, [cedula, nombre, apellido, email, hash, grado_asignado]);
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        if (err.code === getUniqueConstraintError()) {
+            return res.status(409).json({ message: 'La cédula o el correo electrónico ya están registrados.' });
+        }
+        res.status(500).json({ message: 'Error al registrar el maestro' });
+    }
+});
+
+// --- API para Maestros ---
+
+// Obtener datos del maestro logueado y sus estudiantes
+app.get('/api/maestro/dashboard', auth('maestro'), async (req, res) => {
+    try {
+        const id_maestro = req.session.user.id;
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+        
+        // Obtener datos del maestro
+        const maestroQuery = isProduction ? 
+            'SELECT cedula, nombre, apellido, email, grado_asignado FROM maestros WHERE id = $1' : 
+            'SELECT cedula, nombre, apellido, email, grado_asignado FROM maestros WHERE id = ?';
+        const maestroResult = await db.query(maestroQuery, [id_maestro]);
+        
+        // Obtener la lista de estudiantes del grado asignado
+        const estudiantesQuery = isProduction ? 
+            'SELECT id, carnet, nombre, cedula, fecha_nacimiento, grado FROM estudiantes WHERE grado = $1 ORDER BY nombre' : 
+            'SELECT id, carnet, nombre, cedula, fecha_nacimiento, grado FROM estudiantes WHERE grado = ? ORDER BY nombre';
+        const estudiantesResult = await db.query(estudiantesQuery, [maestroResult.rows[0].grado_asignado]);
+
+        if (maestroResult.rows.length === 0) {
+            return res.status(404).json({ message: 'Maestro no encontrado.' });
+        }
+
+        res.json({
+            maestro: maestroResult.rows[0],
+            estudiantes: estudiantesResult.rows
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al obtener los datos del dashboard.' });
+    }
+});
+
+// Obtener notas de un estudiante específico (versión maestro)
+app.get('/api/maestro/estudiantes/:id/notas', auth('maestro'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const id_maestro = req.session.user.id;
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+
+        // Obtener el grado asignado del maestro
+        const maestroQuery = isProduction ? 
+            'SELECT grado_asignado FROM maestros WHERE id = $1' : 
+            'SELECT grado_asignado FROM maestros WHERE id = ?';
+        const maestroResult = await db.query(maestroQuery, [id_maestro]);
+        
+        if (maestroResult.rows.length === 0) {
+            return res.status(404).json({ message: 'Maestro no encontrado.' });
+        }
+        
+        const gradoAsignado = maestroResult.rows[0].grado_asignado;
+
+        // Verificar que el estudiante pertenece al grado del maestro
+        const verificacionQuery = isProduction ? 
+            'SELECT id FROM estudiantes WHERE id = $1 AND grado = $2' : 
+            'SELECT id FROM estudiantes WHERE id = ? AND grado = ?';
+        const verificacion = await db.query(verificacionQuery, [id, gradoAsignado]);
+        
+        if (verificacion.rows.length === 0) {
+            return res.status(403).json({ message: 'No tiene permiso para ver las notas de este estudiante.' });
+        }
+
+        const notasQuery = isProduction ? 
+            'SELECT id, materia, calificacion, periodo, tipo_calificacion FROM notas WHERE id_estudiante = $1 ORDER BY periodo, materia' : 
+            'SELECT id, materia, calificacion, periodo, tipo_calificacion FROM notas WHERE id_estudiante = ? ORDER BY periodo, materia';
+        const notasResult = await db.query(notasQuery, [id]);
+        res.json(notasResult.rows);
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al obtener las notas.' });
+    }
+});
+
+// Registrar nota desde maestro
+app.post('/api/maestro/notas', auth('maestro'), async (req, res) => {
+    const { carnet_estudiante, materia, calificacion, periodo } = req.body;
+    if (!carnet_estudiante || !materia || !calificacion || !periodo) {
+        return res.status(400).json({ message: 'Todos los campos son obligatorios.' });
+    }
+    
+    try {
+        const id_maestro = req.session.user.id;
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+        
+        // Obtener el grado asignado del maestro
+        const maestroQuery = isProduction ? 
+            'SELECT grado_asignado FROM maestros WHERE id = $1' : 
+            'SELECT grado_asignado FROM maestros WHERE id = ?';
+        const maestroResult = await db.query(maestroQuery, [id_maestro]);
+        
+        if (maestroResult.rows.length === 0) {
+            return res.status(404).json({ message: 'Maestro no encontrado.' });
+        }
+        
+        const gradoAsignado = maestroResult.rows[0].grado_asignado;
+        
+        // Verificar que el estudiante existe y pertenece al grado del maestro
+        const estudianteQuery = isProduction ? 
+            'SELECT id FROM estudiantes WHERE carnet = $1 AND grado = $2' : 
+            'SELECT id FROM estudiantes WHERE carnet = ? AND grado = ?';
+        const estudianteResult = await db.query(estudianteQuery, [carnet_estudiante, gradoAsignado]);
+        
+        if (estudianteResult.rows.length === 0) {
+            return res.status(404).json({ message: 'No se encontró ningún estudiante con ese carnet en su grado asignado.' });
+        }
+        
+        const id_estudiante = estudianteResult.rows[0].id;
+        
+        // Determinar el tipo de calificación basado en el grado
+        const esPreescolar = ['1er Nivel Pre-Escolar', '2do Nivel Pre-Escolar', '3er Nivel Pre-Escolar'].includes(gradoAsignado);
+        const tipoCalificacion = esPreescolar ? 'letra' : 'numerica';
+        
+        // Validar calificación según el tipo
+        if (esPreescolar) {
+            if (!['A', 'B', 'C'].includes(calificacion.toUpperCase())) {
+                return res.status(400).json({ message: 'Para preescolar, las calificaciones deben ser A, B o C.' });
+            }
+        } else {
+            const calificacionNum = parseFloat(calificacion);
+            if (isNaN(calificacionNum) || calificacionNum < 0 || calificacionNum > 20) {
+                return res.status(400).json({ message: 'La calificación debe ser un número entre 0 y 20.' });
+            }
+        }
+
+        const insertQuery = isProduction ? 
+            'INSERT INTO notas (id_estudiante, materia, calificacion, periodo, tipo_calificacion) VALUES ($1, $2, $3, $4, $5) RETURNING *' :
+            'INSERT INTO notas (id_estudiante, materia, calificacion, periodo, tipo_calificacion) VALUES (?, ?, ?, ?, ?) RETURNING *';
+        
+        const result = await db.query(insertQuery, [id_estudiante, materia, calificacion, periodo, tipoCalificacion]);
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al registrar la nota' });
     }
 });
 

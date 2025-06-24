@@ -65,6 +65,78 @@
                 </div>
             </div>
 
+            <!-- Sección: Registrar Maestros -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingMaestros">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseMaestros" aria-expanded="false" aria-controls="collapseMaestros">
+                        <i class="bi bi-person-workspace me-2"></i> Registrar Nuevo Maestro
+                    </button>
+                </h2>
+                <div id="collapseMaestros" class="accordion-collapse collapse" aria-labelledby="headingMaestros" data-bs-parent="#adminAccordion">
+                    <div class="accordion-body">
+                        <form id="form-registrar-maestro">
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <div class="mb-3">
+                                        <label for="maestro-cedula" class="form-label">Cédula de Identidad</label>
+                                        <input type="text" class="form-control" id="maestro-cedula" required placeholder="8 dígitos" maxlength="8" pattern="[0-9]{8}">
+                                        <div class="form-text">Ingrese la cédula de 8 dígitos del maestro.</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="mb-3">
+                                        <label for="maestro-nombre" class="form-label">Nombre</label>
+                                        <input type="text" class="form-control" id="maestro-nombre" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="mb-3">
+                                        <label for="maestro-apellido" class="form-label">Apellido</label>
+                                        <input type="text" class="form-control" id="maestro-apellido" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="mb-3">
+                                        <label for="maestro-email" class="form-label">Correo Electrónico</label>
+                                        <input type="email" class="form-control" id="maestro-email" required>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="maestro-grado-asignado" class="form-label">Grado Asignado</label>
+                                        <select class="form-select" id="maestro-grado-asignado" required>
+                                            <option value="">Seleccione un grado</option>
+                                            <optgroup label="Pre-Escolar">
+                                                <option value="1er Nivel Pre-Escolar">1er Nivel Pre-Escolar</option>
+                                                <option value="2do Nivel Pre-Escolar">2do Nivel Pre-Escolar</option>
+                                                <option value="3er Nivel Pre-Escolar">3er Nivel Pre-Escolar</option>
+                                            </optgroup>
+                                            <optgroup label="Primaria">
+                                                <option value="1er Grado">1er Grado</option>
+                                                <option value="2do Grado">2do Grado</option>
+                                                <option value="3er Grado">3er Grado</option>
+                                                <option value="4to Grado">4to Grado</option>
+                                                <option value="5to Grado">5to Grado</option>
+                                                <option value="6to Grado">6to Grado</option>
+                                            </optgroup>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="maestro-password" class="form-label">Contraseña</label>
+                                        <input type="password" class="form-control" id="maestro-password" required>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-success">Registrar Maestro</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
             <!-- Sección: Registrar Estudiantes -->
             <div class="accordion-item">
                 <h2 class="accordion-header" id="headingEstudiantes">
@@ -87,12 +159,19 @@
                                         <label for="est-grado" class="form-label">Grado</label>
                                         <select class="form-select" id="est-grado" required>
                                             <option value="">Seleccione un grado</option>
-                                            <option value="1er Grado">1er Grado</option>
-                                            <option value="2do Grado">2do Grado</option>
-                                            <option value="3er Grado">3er Grado</option>
-                                            <option value="4to Grado">4to Grado</option>
-                                            <option value="5to Grado">5to Grado</option>
-                                            <option value="6to Grado">6to Grado</option>
+                                            <optgroup label="Pre-Escolar">
+                                                <option value="1er Nivel Pre-Escolar">1er Nivel Pre-Escolar</option>
+                                                <option value="2do Nivel Pre-Escolar">2do Nivel Pre-Escolar</option>
+                                                <option value="3er Nivel Pre-Escolar">3er Nivel Pre-Escolar</option>
+                                            </optgroup>
+                                            <optgroup label="Primaria">
+                                                <option value="1er Grado">1er Grado</option>
+                                                <option value="2do Grado">2do Grado</option>
+                                                <option value="3er Grado">3er Grado</option>
+                                                <option value="4to Grado">4to Grado</option>
+                                                <option value="5to Grado">5to Grado</option>
+                                                <option value="6to Grado">6to Grado</option>
+                                            </optgroup>
                                         </select>
                                     </div>
                                 </div>
@@ -256,6 +335,22 @@
                 </div>
             </div>
 
+            <!-- Sección: Maestros Registrados -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingListaMaestros">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseListaMaestros" aria-expanded="false" aria-controls="collapseListaMaestros">
+                        <i class="bi bi-person-workspace me-2"></i> Maestros Registrados
+                    </button>
+                </h2>
+                <div id="collapseListaMaestros" class="accordion-collapse collapse" aria-labelledby="headingListaMaestros" data-bs-parent="#adminAccordion">
+                    <div class="accordion-body">
+                        <ul class="list-group" id="lista-maestros">
+                            <!-- La lista se llenará dinámicamente -->
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
             <!-- Sección: Generar Mensualidades -->
             <div class="accordion-item">
                 <h2 class="accordion-header" id="headingMensualidades">
@@ -298,8 +393,10 @@
         const formRepresentante = document.getElementById('form-registrar-representante');
         const formEstudiante = document.getElementById('form-registrar-estudiante');
         const formNota = document.getElementById('form-registrar-nota');
+        const formMaestro = document.getElementById('form-registrar-maestro');
         const listaRepresentantes = document.getElementById('lista-representantes');
         const listaEstudiantes = document.getElementById('lista-estudiantes');
+        const listaMaestros = document.getElementById('lista-maestros');
         const alertContainer = document.getElementById('alert-container');
         const mensualidadEstudiante = document.getElementById('mensualidad-estudiante');
 
