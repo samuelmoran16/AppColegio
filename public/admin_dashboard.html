@@ -487,6 +487,40 @@
             }
         }
 
+        // Cargar maestros al iniciar la página
+        async function cargarMaestros() {
+            try {
+                const response = await fetch('/api/maestros');
+                if (!response.ok) throw new Error('No se pudo cargar la lista de maestros.');
+                const maestros = await response.json();
+
+                listaMaestros.innerHTML = '';
+                
+                if (maestros.length === 0) {
+                    listaMaestros.innerHTML = '<li class="list-group-item">No hay maestros registrados.</li>';
+                } else {
+                    maestros.forEach(maestro => {
+                        // Llenar la lista
+                        const li = document.createElement('li');
+                        li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                        li.innerHTML = `
+                            <div>
+                                <strong>${maestro.nombre} ${maestro.apellido}</strong><br>
+                                <small class="text-muted">Cédula: ${maestro.cedula} | Email: ${maestro.email} | Grado: ${maestro.grado_asignado}</small>
+                            </div>
+                            <div>
+                                <button class="btn btn-warning btn-sm me-2" onclick='abrirModalEditarMaestro(${JSON.stringify(maestro)})'>Editar</button>
+                                <button class="btn btn-danger btn-sm" onclick="eliminarMaestro(${maestro.id}, '${maestro.nombre} ${maestro.apellido}')">Eliminar</button>
+                            </div>
+                        `;
+                        listaMaestros.appendChild(li);
+                    });
+                }
+            } catch (error) {
+                showAlert(error.message, 'danger');
+            }
+        }
+
         // Evento para registrar representante
         formRepresentante.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -533,7 +567,51 @@
                 submitBtn.disabled = false;
             }
         });
-        
+
+        // Evento para registrar maestro
+        formMaestro.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // Mostrar indicador de carga
+            const submitBtn = formMaestro.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Registrando...';
+            submitBtn.disabled = true;
+            
+            const body = {
+                cedula: document.getElementById('maestro-cedula').value,
+                nombre: document.getElementById('maestro-nombre').value,
+                apellido: document.getElementById('maestro-apellido').value,
+                email: document.getElementById('maestro-email').value,
+                password: document.getElementById('maestro-password').value,
+                grado_asignado: document.getElementById('maestro-grado-asignado').value
+            };
+
+            try {
+                const response = await fetch('/api/maestros', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) throw new Error(data.message || response.statusText);
+
+                showAlert('Maestro registrado con éxito. Cédula: ' + data.cedula);
+                formMaestro.reset();
+                cargarMaestros(); // Recargar la lista
+                
+            } catch (error) {
+                console.error('Error al registrar maestro:', error);
+                showAlert(error.message, 'danger');
+            } finally {
+                // Restaurar botón
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            }
+        });
+
         // Evento para registrar estudiante
         formEstudiante.addEventListener('submit', async (e) => {
              e.preventDefault();
@@ -637,10 +715,26 @@
             }
         }
 
+        async function eliminarMaestro(id, nombre) {
+            if (!confirm(`¿Estás seguro de que quieres eliminar al maestro "${nombre}"?`)) {
+                return;
+            }
+            try {
+                const response = await fetch(`/api/maestros/${id}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.message);
+                showAlert(data.message);
+                cargarMaestros();
+            } catch (error) {
+                showAlert(error.message, 'danger');
+            }
+        }
+
         // Carga inicial
         document.addEventListener('DOMContentLoaded', () => {
             cargarRepresentantes();
             cargarEstudiantes();
+            cargarMaestros();
             
             // Configurar eventos para el manejo de cédula
             configurarCedulaEvents();

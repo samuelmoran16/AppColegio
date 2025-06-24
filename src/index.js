@@ -1042,6 +1042,28 @@ app.post('/api/maestro/notas', auth('maestro'), async (req, res) => {
     }
 });
 
+// Eliminar un maestro
+app.delete('/api/maestros/:id', auth('admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+        
+        const deleteQuery = isProduction ? 
+            'DELETE FROM maestros WHERE id = $1' : 
+            'DELETE FROM maestros WHERE id = ?';
+        const result = await db.query(deleteQuery, [id]);
+        
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Maestro no encontrado.' });
+        }
+        res.status(200).json({ message: 'Maestro eliminado con éxito.' });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al eliminar el maestro.' });
+    }
+});
+
 app.get('/', (req, res) => {
   res.redirect('/login.html');
 });
