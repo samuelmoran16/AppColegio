@@ -232,8 +232,8 @@ app.delete('/api/representantes/:id', auth('admin'), async (req, res) => {
         
         // Verificar si el representante tiene estudiantes a su cargo
         const estudiantesQuery = isProduction ? 
-            'SELECT id FROM estudiantes WHERE id_representante = $1' : 
-            'SELECT id FROM estudiantes WHERE id_representante = ?';
+            'SELECT id FROM estudiantes WHERE cedula_representante = (SELECT cedula FROM representantes WHERE id = $1)' : 
+            'SELECT id FROM estudiantes WHERE cedula_representante = (SELECT cedula FROM representantes WHERE id = ?)';
         const estudiantes = await db.query(estudiantesQuery, [id]);
         
         if (estudiantes.rows.length > 0) {

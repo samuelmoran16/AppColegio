@@ -321,6 +321,9 @@ const migrarTablaEstudiantes = async () => {
         
         // Migrar la columna cedula para hacerla opcional
         await migrarCedulaOpcional();
+        
+        // Migrar la columna id_representante a cedula_representante
+        await migrarRepresentanteEstudiante();
       } else {
         console.log('Tabla de estudiantes no existe, se creará con la nueva estructura.');
       }
@@ -359,6 +362,9 @@ const migrarTablaEstudiantes = async () => {
         
         // Migrar la columna cedula para hacerla opcional
         await migrarCedulaOpcional();
+        
+        // Migrar la columna id_representante a cedula_representante
+        await migrarRepresentanteEstudiante();
       } else {
         console.log('Tabla de estudiantes no existe, se creará con la nueva estructura.');
       }
@@ -550,6 +556,103 @@ const migrarTablaRepresentantes = async () => {
     }
   } catch (err) {
     console.error('Error migrando tabla de representantes:', err);
+    throw err;
+  }
+};
+
+// Función para migrar la columna id_representante a cedula_representante
+const migrarRepresentanteEstudiante = async () => {
+  try {
+    const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+    
+    if (isProduction) {
+      // PostgreSQL - Verificar si la columna cedula_representante existe
+      const columns = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'estudiantes' 
+        AND table_schema = 'public'
+      `);
+      
+      const columnNames = columns.rows.map(row => row.column_name);
+      
+      if (!columnNames.includes('cedula_representante')) {
+        console.log('Migrando tabla de estudiantes para usar cedula_representante...');
+        
+        // Añadir la columna cedula_representante
+        await pool.query('ALTER TABLE estudiantes ADD COLUMN cedula_representante VARCHAR(8) REFERENCES representantes(cedula)');
+        
+        // Migrar datos existentes
+        const estudiantes = await pool.query('SELECT id, id_representante FROM estudiantes WHERE id_representante IS NOT NULL');
+        for (let i = 0; i < estudiantes.rows.length; i++) {
+          const repResult = await pool.query('SELECT cedula FROM representantes WHERE id = $1', [estudiantes.rows[i].id_representante]);
+          if (repResult.rows.length > 0) {
+            await pool.query('UPDATE estudiantes SET cedula_representante = $1 WHERE id = $2', 
+              [repResult.rows[0].cedula, estudiantes.rows[i].id]);
+          }
+        }
+        
+        // Eliminar la columna id_representante
+        await pool.query('ALTER TABLE estudiantes DROP COLUMN id_representante');
+        
+        console.log('Tabla de estudiantes migrada correctamente para usar cedula_representante.');
+      } else {
+        console.log('Tabla de estudiantes ya tiene la columna cedula_representante.');
+      }
+    } else {
+      // SQLite - Recrear la tabla
+      const columns = await pool.query(`
+        PRAGMA table_info(estudiantes)
+      `);
+      
+      const columnNames = columns.rows.map(row => row.name);
+      
+      if (!columnNames.includes('cedula_representante')) {
+        console.log('Migrando tabla de estudiantes para usar cedula_representante (recreando tabla en SQLite)...');
+        
+        // 1. Renombrar la tabla original
+        await pool.query('ALTER TABLE estudiantes RENAME TO estudiantes_old');
+        
+        // 2. Crear la nueva tabla con cedula_representante
+        await pool.query(`CREATE TABLE estudiantes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          carnet TEXT UNIQUE NOT NULL,
+          nombre TEXT NOT NULL,
+          cedula TEXT,
+          fecha_nacimiento TEXT,
+          grado TEXT,
+          cedula_representante TEXT REFERENCES representantes(cedula)
+        )`);
+        
+        // 3. Copiar los datos de la tabla vieja a la nueva
+        const estudiantes = await pool.query('SELECT id, carnet, nombre, cedula, fecha_nacimiento, grado, id_representante FROM estudiantes_old ORDER BY id');
+        for (let i = 0; i < estudiantes.rows.length; i++) {
+          const est = estudiantes.rows[i];
+          let cedulaRep = null;
+          
+          if (est.id_representante) {
+            const repResult = await pool.query('SELECT cedula FROM representantes WHERE id = ?', [est.id_representante]);
+            if (repResult.rows.length > 0) {
+              cedulaRep = repResult.rows[0].cedula;
+            }
+          }
+          
+          await pool.query(
+            'INSERT INTO estudiantes (id, carnet, nombre, cedula, fecha_nacimiento, grado, cedula_representante) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [est.id, est.carnet, est.nombre, est.cedula, est.fecha_nacimiento, est.grado, cedulaRep]
+          );
+        }
+        
+        // 4. Eliminar la tabla vieja
+        await pool.query('DROP TABLE estudiantes_old');
+        
+        console.log('Tabla de estudiantes migrada correctamente para usar cedula_representante.');
+      } else {
+        console.log('Tabla de estudiantes ya tiene la columna cedula_representante.');
+      }
+    }
+  } catch (err) {
+    console.error('Error migrando tabla de estudiantes para cedula_representante:', err);
     throw err;
   }
 };
