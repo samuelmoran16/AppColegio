@@ -56,6 +56,7 @@ const initDB = async () => {
 
       await pool.query(`CREATE TABLE IF NOT EXISTS representantes (
         id SERIAL PRIMARY KEY,
+        cedula VARCHAR(8) UNIQUE NOT NULL,
         nombre VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL
@@ -68,7 +69,7 @@ const initDB = async () => {
         cedula VARCHAR(20),
         fecha_nacimiento DATE,
         grado VARCHAR(50),
-        id_representante INTEGER REFERENCES representantes(id)
+        cedula_representante VARCHAR(8) REFERENCES representantes(cedula)
       )`);
 
       await pool.query(`CREATE TABLE IF NOT EXISTS notas (
@@ -89,6 +90,7 @@ const initDB = async () => {
 
       await pool.query(`CREATE TABLE IF NOT EXISTS representantes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cedula TEXT UNIQUE NOT NULL,
         nombre TEXT NOT NULL,
         email TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL
@@ -101,7 +103,7 @@ const initDB = async () => {
         cedula TEXT,
         fecha_nacimiento TEXT,
         grado TEXT,
-        id_representante INTEGER REFERENCES representantes(id)
+        cedula_representante TEXT REFERENCES representantes(cedula)
       )`);
 
       await pool.query(`CREATE TABLE IF NOT EXISTS notas (
@@ -115,6 +117,9 @@ const initDB = async () => {
 
     // Migración de la tabla Pagos
     await migrarTablaPagos();
+
+    // Migración de la tabla Representantes
+    await migrarTablaRepresentantes();
 
     // Migración de la tabla Estudiantes
     await migrarTablaEstudiantes();
@@ -401,6 +406,29 @@ const migrarCedulaOpcional = async () => {
   }
 };
 
+// Función para generar cédula única de representante
+const generarCedulaRepresentante = async () => {
+  let cedula;
+  let existe = true;
+  const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+  
+  // Generar cédula hasta que sea única
+  while (existe) {
+    cedula = Math.floor(Math.random() * 90000000) + 10000000; // Número de 8 dígitos
+    cedula = cedula.toString();
+    
+    if (isProduction) {
+      const result = await pool.query('SELECT id FROM representantes WHERE cedula = $1', [cedula]);
+      existe = result.rows.length > 0;
+    } else {
+      const result = await pool.query('SELECT id FROM representantes WHERE cedula = ?', [cedula]);
+      existe = result.rows.length > 0;
+    }
+  }
+  
+  return cedula;
+};
+
 // Función para generar carnet único
 const generarCarnetUnico = async () => {
   const año = new Date().getFullYear();
@@ -425,4 +453,105 @@ const generarCarnetUnico = async () => {
   return carnet;
 };
 
-module.exports = { db: pool, initDB, generarCarnetUnico }; 
+// Función para migrar la tabla de representantes y añadir cédulas únicas
+const migrarTablaRepresentantes = async () => {
+  try {
+    const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+    
+    if (isProduction) {
+      // PostgreSQL - Producción
+      const tableExists = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'representantes'
+        );
+      `);
+
+      if (tableExists.rows[0].exists) {
+        // La tabla existe, verificar si tiene la columna cedula
+        const columns = await pool.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'representantes' 
+          AND table_schema = 'public'
+        `);
+        
+        const columnNames = columns.rows.map(row => row.column_name);
+        
+        // Si no tiene la columna cedula, añadirla
+        if (!columnNames.includes('cedula')) {
+          console.log('Migrando tabla de representantes para añadir cédulas...');
+          
+          // Añadir la columna cedula
+          await pool.query('ALTER TABLE representantes ADD COLUMN cedula VARCHAR(8) UNIQUE');
+          
+          // Generar cédulas para representantes existentes
+          const representantes = await pool.query('SELECT id FROM representantes ORDER BY id');
+          for (let i = 0; i < representantes.rows.length; i++) {
+            const cedula = await generarCedulaRepresentante();
+            await pool.query('UPDATE representantes SET cedula = $1 WHERE id = $2', [cedula, representantes.rows[i].id]);
+          }
+          
+          // Hacer la columna NOT NULL
+          await pool.query('ALTER TABLE representantes ALTER COLUMN cedula SET NOT NULL');
+          
+          console.log('Tabla de representantes migrada correctamente con cédulas únicas.');
+        } else {
+          console.log('Tabla de representantes ya tiene la columna cedula.');
+        }
+      } else {
+        console.log('Tabla de representantes no existe, se creará con la nueva estructura.');
+      }
+    } else {
+      // SQLite - Desarrollo
+      const tableExists = await pool.query(`
+        SELECT name FROM sqlite_master WHERE type='table' AND name='representantes'
+      `);
+
+      if (tableExists.rows.length > 0) {
+        // La tabla existe, verificar si tiene la columna cedula
+        const columns = await pool.query(`
+          PRAGMA table_info(representantes)
+        `);
+        
+        const columnNames = columns.rows.map(row => row.name);
+        
+        // Si no tiene la columna cedula, recrear la tabla correctamente
+        if (!columnNames.includes('cedula')) {
+          console.log('Migrando tabla de representantes para añadir cédulas (recreando tabla en SQLite)...');
+          // 1. Renombrar la tabla original
+          await pool.query('ALTER TABLE representantes RENAME TO representantes_old');
+          // 2. Crear la nueva tabla con la columna cedula UNIQUE
+          await pool.query(`CREATE TABLE representantes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cedula TEXT UNIQUE,
+            nombre TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL
+          )`);
+          // 3. Copiar los datos de la tabla vieja a la nueva (sin cédula)
+          const reps = await pool.query('SELECT id, nombre, email, password FROM representantes_old ORDER BY id');
+          for (let i = 0; i < reps.rows.length; i++) {
+            const cedula = await generarCedulaRepresentante();
+            await pool.query('INSERT INTO representantes (id, cedula, nombre, email, password) VALUES (?, ?, ?, ?, ?)', [
+              reps.rows[i].id, cedula, reps.rows[i].nombre, reps.rows[i].email, reps.rows[i].password
+            ]);
+          }
+          // 4. Eliminar la tabla vieja
+          await pool.query('DROP TABLE representantes_old');
+          console.log('Tabla de representantes migrada correctamente con cédulas únicas.');
+        } else {
+          console.log('Tabla de representantes ya tiene la columna cedula.');
+        }
+      } else {
+        console.log('Tabla de representantes no existe, se creará con la nueva estructura.');
+      }
+    }
+  } catch (err) {
+    console.error('Error migrando tabla de representantes:', err);
+    throw err;
+  }
+};
+
+module.exports = { db: pool, initDB, generarCarnetUnico, generarCedulaRepresentante }; 

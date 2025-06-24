@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 const session = require('express-session');
 const bodyParser = require('body-parser');
-const { db, initDB, generarCarnetUnico } = require('./db');
+const { db, initDB, generarCarnetUnico, generarCedulaRepresentante } = require('./db');
 const bcrypt = require('bcrypt');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
@@ -120,7 +120,7 @@ app.get('/representante/dashboard', auth('representante'), (req, res) => {
 // Obtener todos los representantes
 app.get('/api/representantes', auth('admin'), async (req, res) => {
     try {
-        const result = await db.query('SELECT id, nombre, email FROM representantes ORDER BY nombre');
+        const result = await db.query('SELECT id, cedula, nombre, email FROM representantes ORDER BY nombre');
         res.json(result.rows);
     } catch (err) {
         console.error(err);
@@ -136,12 +136,14 @@ app.post('/api/representantes', auth('admin'), async (req, res) => {
     }
     try {
         const hash = await bcrypt.hash(password, 10);
+        const cedula = await generarCedulaRepresentante();
+        
         const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
         const query = isProduction ? 
-            'INSERT INTO representantes (nombre, email, password) VALUES ($1, $2, $3) RETURNING id, nombre, email' :
-            'INSERT INTO representantes (nombre, email, password) VALUES (?, ?, ?) RETURNING id, nombre, email';
+            'INSERT INTO representantes (cedula, nombre, email, password) VALUES ($1, $2, $3, $4) RETURNING id, cedula, nombre, email' :
+            'INSERT INTO representantes (cedula, nombre, email, password) VALUES (?, ?, ?, ?) RETURNING id, cedula, nombre, email';
         
-        const result = await db.query(query, [nombre, email, hash]);
+        const result = await db.query(query, [cedula, nombre, email, hash]);
         res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error(err);
@@ -154,20 +156,30 @@ app.post('/api/representantes', auth('admin'), async (req, res) => {
 
 // Registrar un nuevo estudiante
 app.post('/api/estudiantes', auth('admin'), async (req, res) => {
-    const { nombre, cedula, fecha_nacimiento, grado, id_representante } = req.body;
-     if (!nombre || !id_representante || !grado) {
-        return res.status(400).json({ message: 'Nombre, Grado y Representante son obligatorios.' });
+    const { nombre, cedula, fecha_nacimiento, grado, cedula_representante } = req.body;
+     if (!nombre || !cedula_representante || !grado) {
+        return res.status(400).json({ message: 'Nombre, Grado y Cédula del Representante son obligatorios.' });
     }
     try {
+        // Verificar que el representante existe
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+        const representanteQuery = isProduction ? 
+            'SELECT id FROM representantes WHERE cedula = $1' : 
+            'SELECT id FROM representantes WHERE cedula = ?';
+        const representanteResult = await db.query(representanteQuery, [cedula_representante]);
+        
+        if (representanteResult.rows.length === 0) {
+            return res.status(404).json({ message: 'No se encontró ningún representante con esa cédula.' });
+        }
+        
         // Generar carnet único
         const carnet = await generarCarnetUnico();
         
-        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
         const query = isProduction ? 
-            'INSERT INTO estudiantes (carnet, nombre, cedula, fecha_nacimiento, grado, id_representante) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *' :
-            'INSERT INTO estudiantes (carnet, nombre, cedula, fecha_nacimiento, grado, id_representante) VALUES (?, ?, ?, ?, ?, ?) RETURNING *';
+            'INSERT INTO estudiantes (carnet, nombre, cedula, fecha_nacimiento, grado, cedula_representante) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *' :
+            'INSERT INTO estudiantes (carnet, nombre, cedula, fecha_nacimiento, grado, cedula_representante) VALUES (?, ?, ?, ?, ?, ?) RETURNING *';
         
-        const result = await db.query(query, [carnet, nombre, cedula || null, fecha_nacimiento || null, grado, id_representante]);
+        const result = await db.query(query, [carnet, nombre, cedula || null, fecha_nacimiento || null, grado, cedula_representante]);
         res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error(err);
@@ -302,9 +314,9 @@ app.put('/api/estudiantes/:id', auth('admin'), async (req, res) => {
 app.get('/api/estudiantes', auth('admin'), async (req, res) => {
     try {
         const result = await db.query(`
-            SELECT e.id, e.carnet, e.nombre, e.cedula, e.grado, r.nombre as nombre_representante 
+            SELECT e.id, e.carnet, e.nombre, e.cedula, e.grado, r.cedula as cedula_representante, r.nombre as nombre_representante 
             FROM estudiantes e 
-            JOIN representantes r ON e.id_representante = r.id 
+            JOIN representantes r ON e.cedula_representante = r.cedula 
             ORDER BY e.nombre
         `);
         res.json(result.rows);
@@ -355,15 +367,15 @@ app.get('/api/representante/dashboard', auth('representante'), async (req, res) 
         
         // Obtener datos del representante
         const repQuery = isProduction ? 
-            'SELECT nombre, email FROM representantes WHERE id = $1' : 
-            'SELECT nombre, email FROM representantes WHERE id = ?';
+            'SELECT cedula, nombre, email FROM representantes WHERE id = $1' : 
+            'SELECT cedula, nombre, email FROM representantes WHERE id = ?';
         const repResult = await db.query(repQuery, [id_representante]);
         
         // Obtener la lista de hijos
         const hijosQuery = isProduction ? 
-            'SELECT id, carnet, nombre, cedula, fecha_nacimiento, grado FROM estudiantes WHERE id_representante = $1 ORDER BY nombre' : 
-            'SELECT id, carnet, nombre, cedula, fecha_nacimiento, grado FROM estudiantes WHERE id_representante = ? ORDER BY nombre';
-        const hijosResult = await db.query(hijosQuery, [id_representante]);
+            'SELECT id, carnet, nombre, cedula, fecha_nacimiento, grado FROM estudiantes WHERE cedula_representante = $1 ORDER BY nombre' : 
+            'SELECT id, carnet, nombre, cedula, fecha_nacimiento, grado FROM estudiantes WHERE cedula_representante = ? ORDER BY nombre';
+        const hijosResult = await db.query(hijosQuery, [repResult.rows[0].cedula]);
 
         if (repResult.rows.length === 0) {
             return res.status(404).json({ message: 'Representante no encontrado.' });
@@ -416,6 +428,19 @@ app.get('/api/representante/pagos', auth('representante'), async (req, res) => {
     try {
         const id_representante = req.session.user.id;
         
+        // Primero obtener la cédula del representante
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+        const cedulaQuery = isProduction ? 
+            'SELECT cedula FROM representantes WHERE id = $1' : 
+            'SELECT cedula FROM representantes WHERE id = ?';
+        const cedulaResult = await db.query(cedulaQuery, [id_representante]);
+        
+        if (cedulaResult.rows.length === 0) {
+            return res.status(404).json({ message: 'Representante no encontrado.' });
+        }
+        
+        const cedula_representante = cedulaResult.rows[0].cedula;
+        
         // Obtener todos los hijos del representante con sus pagos
         const result = await db.query(`
             SELECT 
@@ -434,9 +459,9 @@ app.get('/api/representante/pagos', auth('representante'), async (req, res) => {
                 p.concepto
             FROM estudiantes e
             LEFT JOIN pagos p ON e.id = p.id_estudiante
-            WHERE e.id_representante = ?
+            WHERE e.cedula_representante = ?
             ORDER BY e.nombre, p.año DESC, p.mes DESC
-        `, [id_representante]);
+        `, [cedula_representante]);
 
         // Organizar los datos por estudiante
         const estudiantes = {};
