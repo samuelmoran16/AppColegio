@@ -20,13 +20,20 @@
             border-radius: 1rem;
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
+        .alert {
+            display: none;
+        }
     </style>
 </head>
 <body>
     <div class="card login-card">
         <div class="card-body">
             <h3 class="card-title text-center mb-4">Iniciar Sesión</h3>
-            <form action="/login" method="POST">
+            
+            <!-- Alertas para mostrar errores/éxitos -->
+            <div id="alert" class="alert" role="alert"></div>
+            
+            <form id="loginForm">
                 <div class="mb-3">
                     <label for="email" class="form-label">Correo Electrónico</label>
                     <input type="email" class="form-control" id="email" name="email" required>
@@ -44,10 +51,82 @@
                     </select>
                 </div>
                 <div class="d-grid">
-                    <button type="submit" class="btn btn-primary">Ingresar</button>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <span id="btnText">Ingresar</span>
+                        <span id="btnSpinner" class="spinner-border spinner-border-sm" style="display: none;"></span>
+                    </button>
                 </div>
             </form>
         </div>
     </div>
+
+    <script>
+        const loginForm = document.getElementById('loginForm');
+        const alertDiv = document.getElementById('alert');
+        const submitBtn = document.getElementById('submitBtn');
+        const btnText = document.getElementById('btnText');
+        const btnSpinner = document.getElementById('btnSpinner');
+
+        function showAlert(message, type = 'danger') {
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.textContent = message;
+            alertDiv.style.display = 'block';
+        }
+
+        function hideAlert() {
+            alertDiv.style.display = 'none';
+        }
+
+        function setLoading(loading) {
+            if (loading) {
+                submitBtn.disabled = true;
+                btnText.style.display = 'none';
+                btnSpinner.style.display = 'inline-block';
+            } else {
+                submitBtn.disabled = false;
+                btnText.style.display = 'inline';
+                btnSpinner.style.display = 'none';
+            }
+        }
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            hideAlert();
+            setLoading(true);
+
+            const formData = new FormData(loginForm);
+            const data = {
+                email: formData.get('email'),
+                password: formData.get('password'),
+                role: formData.get('role')
+            };
+
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    // Login exitoso - redirigir
+                    window.location.href = result.redirect;
+                } else {
+                    // Error en login
+                    showAlert(result.message || 'Error al iniciar sesión');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showAlert('Error de conexión. Inténtalo de nuevo.');
+            } finally {
+                setLoading(false);
+            }
+        });
+    </script>
 </body>
 </html> 
