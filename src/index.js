@@ -40,14 +40,15 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(session({
   secret: process.env.SESSION_SECRET || 'tu_super_secreto_aqui',
-  resave: false,
+  resave: true,
   saveUninitialized: false,
   cookie: { 
     secure: false,
-    maxAge: 24 * 60 * 60 * 1000,
+    maxAge: 24 * 60 * 60 * 1000, // 24 horas
     httpOnly: true,
     sameSite: 'lax'
-  }
+  },
+  name: 'colegio_session'
 }));
 
 // Middleware para logging de requests
@@ -58,49 +59,92 @@ app.use((req, res, next) => {
 
 // Rutas de Login optimizadas
 app.post('/login', async (req, res) => {
-    const { email, password, role } = req.body;
+    const { email, cedula, password, role } = req.body;
     
-    if (!email || !password || !role) {
-        return res.status(400).json({ message: 'Todos los campos son obligatorios' });
+    console.log('🔐 Intento de login:', { email, cedula, role });
+    
+    if (!password || !role) {
+        return res.status(400).json({ message: 'Contraseña y rol son obligatorios' });
+    }
+    
+    // Validar que se proporcione email para admin o cédula para representantes/maestros
+    if (role === 'admin' && !email) {
+        return res.status(400).json({ message: 'Email es obligatorio para administradores' });
+    }
+    
+    if ((role === 'representante' || role === 'maestro') && !cedula) {
+        return res.status(400).json({ message: 'Cédula es obligatoria para representantes y maestros' });
     }
     
     let tableName = '';
-    if (role === 'admin') tableName = 'administradores';
-    if (role === 'representante') tableName = 'representantes';
-    if (role === 'maestro') tableName = 'maestros';
+    let query = '';
+    let params = [];
+    
+    if (role === 'admin') {
+        tableName = 'administradores';
+        query = isProduction() ? 
+            `SELECT * FROM ${tableName} WHERE email = $1` : 
+            `SELECT * FROM ${tableName} WHERE email = ?`;
+        params = [email];
+    } else if (role === 'representante') {
+        tableName = 'representantes';
+        query = isProduction() ? 
+            `SELECT * FROM ${tableName} WHERE cedula = $1` : 
+            `SELECT * FROM ${tableName} WHERE cedula = ?`;
+        params = [cedula];
+    } else if (role === 'maestro') {
+        tableName = 'maestros';
+        query = isProduction() ? 
+            `SELECT * FROM ${tableName} WHERE cedula = $1` : 
+            `SELECT * FROM ${tableName} WHERE cedula = ?`;
+        params = [cedula];
+    }
 
     if (!tableName) {
         return res.status(400).json({ message: 'Rol no válido' });
     }
     
     try {
-        const query = isProduction() ? 
-            `SELECT * FROM ${tableName} WHERE email = $1` : 
-            `SELECT * FROM ${tableName} WHERE email = ?`;
-        
-        const result = await db.query(query, [email]);
+        const result = await db.query(query, params);
         const user = result.rows[0];
 
         if (!user) {
+            console.log('❌ Usuario no encontrado:', role === 'admin' ? email : cedula);
             return res.status(401).json({ message: 'Credenciales incorrectas' });
         }
         
         const match = await bcrypt.compare(password, user.password);
         
         if (match) {
-            req.session.user = { 
+            // Crear objeto de sesión
+            const sessionUser = { 
                 id: user.id, 
                 email: user.email, 
+                cedula: user.cedula,
                 role: role,
                 nombre: user.nombre || `${user.nombre} ${user.apellido || ''}`.trim()
             };
             
-            const redirectUrl = role === 'admin' ? '/admin/dashboard' : 
-                               role === 'maestro' ? '/maestro/dashboard' : 
-                               '/representante/dashboard';
+            // Guardar en sesión
+            req.session.user = sessionUser;
             
-            res.json({ success: true, redirect: redirectUrl });
+            // Forzar guardado de sesión
+            req.session.save((err) => {
+                if (err) {
+                    console.error('Error guardando sesión:', err);
+                    return res.status(500).json({ message: 'Error al crear sesión' });
+                }
+                
+                console.log('✅ Login exitoso:', sessionUser);
+                
+                const redirectUrl = role === 'admin' ? '/admin/dashboard' : 
+                                   role === 'maestro' ? '/maestro/dashboard' : 
+                                   '/representante/dashboard';
+                
+                res.json({ success: true, redirect: redirectUrl });
+            });
         } else {
+            console.log('❌ Contraseña incorrecta para:', role === 'admin' ? email : cedula);
             res.status(401).json({ message: 'Credenciales incorrectas' });
         }
     } catch (err) {
@@ -169,18 +213,14 @@ app.get('/maestro/dashboard', auth('maestro'), (req, res) => {
 
 // --- API para Administrador optimizada ---
 
-// Obtener todos los representantes con paginación
+// Obtener todos los representantes
 app.get('/api/representantes', auth('admin'), async (req, res) => {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 50;
-        const offset = (page - 1) * limit;
-        
         const query = isProduction() ? 
-            'SELECT id, cedula, nombre, email FROM representantes ORDER BY nombre LIMIT $1 OFFSET $2' :
-            'SELECT id, cedula, nombre, email FROM representantes ORDER BY nombre LIMIT ? OFFSET ?';
+            'SELECT id, cedula, nombre, email FROM representantes ORDER BY nombre' :
+            'SELECT id, cedula, nombre, email FROM representantes ORDER BY nombre';
         
-        const result = await db.query(query, [limit, offset]);
+        const result = await db.query(query);
         res.json(result.rows);
     } catch (err) {
         console.error('Error obteniendo representantes:', err);
@@ -188,18 +228,14 @@ app.get('/api/representantes', auth('admin'), async (req, res) => {
     }
 });
 
-// Obtener todos los maestros con paginación
+// Obtener todos los maestros
 app.get('/api/maestros', auth('admin'), async (req, res) => {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 50;
-        const offset = (page - 1) * limit;
-        
         const query = isProduction() ? 
-            'SELECT id, cedula, nombre, apellido, email, grado_asignado FROM maestros ORDER BY nombre LIMIT $1 OFFSET $2' :
-            'SELECT id, cedula, nombre, apellido, email, grado_asignado FROM maestros ORDER BY nombre LIMIT ? OFFSET ?';
+            'SELECT id, cedula, nombre, apellido, email, grado_asignado FROM maestros ORDER BY nombre' :
+            'SELECT id, cedula, nombre, apellido, email, grado_asignado FROM maestros ORDER BY nombre';
         
-        const result = await db.query(query, [limit, offset]);
+        const result = await db.query(query);
         res.json(result.rows);
     } catch (err) {
         console.error('Error obteniendo maestros:', err);
@@ -413,12 +449,9 @@ app.put('/api/estudiantes/:id', auth('admin'), async (req, res) => {
     }
 });
 
-// Obtener todos los estudiantes con paginación y filtros
+// Obtener todos los estudiantes sin paginación ni límite
 app.get('/api/estudiantes', auth('admin'), async (req, res) => {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 50;
-        const offset = (page - 1) * limit;
         const grado = req.query.grado;
         const search = req.query.search;
         
@@ -440,11 +473,9 @@ app.get('/api/estudiantes', auth('admin'), async (req, res) => {
             FROM estudiantes e 
             JOIN representantes r ON e.cedula_representante = r.cedula 
             ${whereClause}
-            ORDER BY e.nombre 
-            LIMIT ? OFFSET ?
+            ORDER BY e.nombre
         `;
         
-        params.push(limit, offset);
         const result = await db.query(query, params);
         res.json(result.rows);
     } catch (err) {
@@ -711,21 +742,21 @@ app.get('/api/representante/pagos', auth('representante'), async (req, res) => {
 // Generar mensualidades pendientes para un estudiante (función auxiliar)
 app.post('/api/admin/generar-mensualidades', auth('admin'), async (req, res) => {
     try {
-        const { estudiante_id, año } = req.body;
+        const { carnet, año } = req.body;
         
         // Validaciones
-        if (!estudiante_id || !año) {
-            return res.status(400).json({ message: 'Estudiante y año son obligatorios.' });
+        if (!carnet || !año) {
+            return res.status(400).json({ message: 'Carnet y año son obligatorios.' });
         }
 
         if (año !== 2025) {
             return res.status(400).json({ message: 'Solo se permiten mensualidades para el año 2025.' });
         }
 
-        // Verificar que el estudiante existe
-        const estudianteExiste = await db.query('SELECT id, nombre FROM estudiantes WHERE id = ?', [estudiante_id]);
+        // Verificar que el estudiante existe por carnet
+        const estudianteExiste = await db.query('SELECT id, nombre FROM estudiantes WHERE carnet = ?', [carnet]);
         if (estudianteExiste.rows.length === 0) {
-            return res.status(404).json({ message: 'Estudiante no encontrado.' });
+            return res.status(404).json({ message: 'No se encontró ningún estudiante con ese carnet.' });
         }
 
         const estudiante = estudianteExiste.rows[0];
@@ -738,7 +769,7 @@ app.post('/api/admin/generar-mensualidades', auth('admin'), async (req, res) => 
         for (let mes of mesesEscolares) {
             try {
                 // Verificar si ya existe
-                const existe = await db.query('SELECT id FROM pagos WHERE id_estudiante = ? AND mes = ? AND año = ?', [estudiante_id, mes, año]);
+                const existe = await db.query('SELECT id FROM pagos WHERE id_estudiante = ? AND mes = ? AND año = ?', [estudiante.id, mes, año]);
                 if (existe.rows.length === 0) {
                     // Calcular fecha de vencimiento (último día del mes)
                     const fechaVencimiento = new Date(año, mes, 0);
@@ -746,7 +777,7 @@ app.post('/api/admin/generar-mensualidades', auth('admin'), async (req, res) => 
                     await db.query(`
                         INSERT INTO pagos (id_estudiante, mes, año, monto, estado, fecha_vencimiento)
                         VALUES (?, ?, ?, ?, 'pendiente', ?)
-                    `, [estudiante_id, mes, año, 12480.00, fechaVencimiento]);
+                    `, [estudiante.id, mes, año, 12480.00, fechaVencimiento]);
                     
                     mensualidadesGeneradas++;
                 } else {
@@ -760,7 +791,7 @@ app.post('/api/admin/generar-mensualidades', auth('admin'), async (req, res) => 
             }
         }
         
-        let mensaje = `Mensualidades procesadas para ${estudiante.nombre} - Año Escolar 2025 (Septiembre-Agosto). `;
+        let mensaje = `Mensualidades procesadas para ${estudiante.nombre} (Carnet: ${carnet}) - Año Escolar 2025 (Septiembre-Agosto). `;
         if (mensualidadesGeneradas > 0) {
             mensaje += `${mensualidadesGeneradas} mensualidades generadas. `;
         }

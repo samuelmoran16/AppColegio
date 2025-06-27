@@ -320,12 +320,15 @@
 
             try {
                 const response = await fetch(`/api/estudiante/${estudianteId}/notas`);
-                const notas = await response.json();
+                const data = await response.json();
 
-                if (!response.ok) throw new Error('No se pudieron cargar las notas.');
+                if (!response.ok) throw new Error(data.message || 'No se pudieron cargar las notas.');
 
+                // Verificar que data.notas existe y es un array
+                const notas = data.notas || [];
+                
                 notasTbody.innerHTML = '';
-                if (notas.length === 0) {
+                if (!Array.isArray(notas) || notas.length === 0) {
                     notasTbody.innerHTML = '<tr><td colspan="3">No hay notas registradas para este estudiante.</td></tr>';
                 } else {
                     notas.forEach(nota => {
@@ -339,7 +342,8 @@
                     });
                 }
             } catch (error) {
-                notasTbody.innerHTML = `<tr><td colspan="3" class="text-danger">${error.message}</td></tr>`;
+                console.error('Error cargando notas:', error);
+                notasTbody.innerHTML = `<tr><td colspan="3" class="text-danger">Error: ${error.message}</td></tr>`;
             }
         }
 

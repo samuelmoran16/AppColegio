@@ -137,6 +137,54 @@
                 </h2>
                 <div id="collapseEstudiantes" class="accordion-collapse collapse" aria-labelledby="headingEstudiantes" data-bs-parent="#maestroAccordion">
                     <div class="accordion-body">
+                        <!-- Información del grado -->
+                        <div class="alert alert-info mb-4">
+                            <h6 class="alert-heading">
+                                <i class="bi bi-info-circle me-2"></i>Grado: <strong id="grado-actual">-</strong>
+                            </h6>
+                            <p class="mb-0">Aquí puedes ver todos los estudiantes de tu grado asignado. Actualmente todos están sin notas cargadas.</p>
+                        </div>
+                        
+                        <!-- Estadísticas -->
+                        <div class="row mb-4">
+                            <div class="col-md-4">
+                                <div class="card bg-primary text-white">
+                                    <div class="card-body text-center">
+                                        <h5 class="card-title">Total Estudiantes</h5>
+                                        <h3 id="contador-total">0</h3>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card bg-warning text-white">
+                                    <div class="card-body text-center">
+                                        <h5 class="card-title">Sin Notas</h5>
+                                        <h3 id="contador-sin-notas">0</h3>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card bg-success text-white">
+                                    <div class="card-body text-center">
+                                        <h5 class="card-title">Con Notas</h5>
+                                        <h3 id="contador-con-notas">0</h3>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Lista de estudiantes -->
+                        <div class="mb-3">
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                <input type="text" class="form-control" id="buscar-estudiantes-maestro" placeholder="Buscar estudiantes por nombre o carnet...">
+                                <button class="btn btn-outline-secondary" type="button" onclick="limpiarBusquedaEstudiantesMaestro()">
+                                    <i class="bi bi-x-circle"></i>
+                                </button>
+                            </div>
+                        </div>
                         <div class="row" id="lista-estudiantes-maestro">
                             <!-- Los estudiantes se cargarán dinámicamente -->
                         </div>
@@ -195,6 +243,7 @@
         const notasModal = new bootstrap.Modal(document.getElementById('notasModal'));
         let maestroData = null;
         let estudiantesData = [];
+        let estudiantesOriginales = [];
 
         // Función para mostrar alertas
         function showAlert(message, type = 'success') {
@@ -225,6 +274,9 @@
                 document.getElementById('maestro-email').textContent = maestroData.email;
                 document.getElementById('maestro-estudiantes-count').textContent = estudiantesData.length;
                 
+                // Actualizar información del grado
+                document.getElementById('grado-actual').textContent = maestroData.grado_asignado;
+                
                 // Cargar lista de estudiantes
                 cargarListaEstudiantes();
                 
@@ -236,37 +288,128 @@
             }
         }
 
-        // Cargar lista de estudiantes
-        function cargarListaEstudiantes() {
-            const container = document.getElementById('lista-estudiantes-maestro');
-            container.innerHTML = '';
-            
-            if (estudiantesData.length === 0) {
-                container.innerHTML = '<div class="col-12"><div class="alert alert-info">No hay estudiantes asignados a este grado.</div></div>';
+        // Funciones de búsqueda para estudiantes en panel de maestros
+        function filtrarEstudiantesMaestro(termino) {
+            if (!termino.trim()) {
+                mostrarEstudiantesMaestro(estudiantesOriginales);
                 return;
             }
             
-            estudiantesData.forEach(estudiante => {
-                const col = document.createElement('div');
-                col.className = 'col-md-6 col-lg-4 mb-3';
-                col.innerHTML = `
-                    <div class="card h-100">
-                        <div class="card-body">
-                            <h6 class="card-title">${estudiante.nombre}</h6>
-                            <p class="card-text">
-                                <small class="text-muted">
-                                    <strong>Carnet:</strong> ${estudiante.carnet}<br>
-                                    <strong>Cédula:</strong> ${estudiante.cedula || 'Sin cédula'}<br>
-                                    <strong>Grado:</strong> ${estudiante.grado}
-                                </small>
-                            </p>
-                            <button class="btn btn-primary btn-sm" onclick="verNotasEstudiante(${estudiante.id}, '${estudiante.nombre}')">
-                                <i class="bi bi-eye me-1"></i>Ver Notas
-                            </button>
+            const filtrados = estudiantesOriginales.filter(est => 
+                est.nombre.toLowerCase().includes(termino.toLowerCase()) ||
+                est.carnet.toString().includes(termino)
+            );
+            
+            mostrarEstudiantesMaestro(filtrados);
+        }
+
+        async function mostrarEstudiantesMaestro(estudiantes) {
+            const container = document.getElementById('lista-estudiantes-maestro');
+            container.innerHTML = '';
+            
+            if (estudiantes.length === 0) {
+                container.innerHTML = '<div class="col-12"><div class="alert alert-info">No se encontraron estudiantes.</div></div>';
+                actualizarContadores(0, 0, 0);
+                return;
+            }
+            
+            // Contar estudiantes con y sin notas
+            let conNotas = 0;
+            let sinNotas = 0;
+            
+            for (const estudiante of estudiantes) {
+                try {
+                    const response = await fetch(`/api/maestro/estudiantes/${estudiante.id}/notas`);
+                    const data = await response.json();
+                    const tieneNotas = Array.isArray(data) && data.length > 0;
+                    
+                    if (tieneNotas) {
+                        conNotas++;
+                    } else {
+                        sinNotas++;
+                    }
+                    
+                    const col = document.createElement('div');
+                    col.className = 'col-md-6 col-lg-4 mb-3';
+                    col.innerHTML = `
+                        <div class="card h-100 ${tieneNotas ? 'border-success' : 'border-warning'}">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h6 class="card-title mb-0">${estudiante.nombre}</h6>
+                                    <span class="badge ${tieneNotas ? 'bg-success' : 'bg-warning'}">
+                                        ${tieneNotas ? 'Con Notas' : 'Sin Notas'}
+                                    </span>
+                                </div>
+                                <p class="card-text">
+                                    <small class="text-muted">
+                                        <strong>Carnet:</strong> ${estudiante.carnet}<br>
+                                        <strong>Grado:</strong> ${estudiante.grado}
+                                    </small>
+                                </p>
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-primary btn-sm" onclick="verNotasEstudiante(${estudiante.id}, '${estudiante.nombre}')">
+                                        <i class="bi bi-eye me-1"></i>Ver Notas
+                                    </button>
+                                    <button class="btn btn-success btn-sm" onclick="copiarCarnet('${estudiante.carnet}')">
+                                        <i class="bi bi-clipboard me-1"></i>Copiar Carnet
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                `;
-                container.appendChild(col);
+                    `;
+                    container.appendChild(col);
+                    
+                } catch (error) {
+                    console.error(`Error al cargar notas de ${estudiante.nombre}:`, error);
+                    sinNotas++;
+                    
+                    const col = document.createElement('div');
+                    col.className = 'col-md-6 col-lg-4 mb-3';
+                    col.innerHTML = `
+                        <div class="card h-100 border-warning">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h6 class="card-title mb-0">${estudiante.nombre}</h6>
+                                    <span class="badge bg-warning">Sin Notas</span>
+                                </div>
+                                <p class="card-text">
+                                    <small class="text-muted">
+                                        <strong>Carnet:</strong> ${estudiante.carnet}<br>
+                                        <strong>Grado:</strong> ${estudiante.grado}
+                                    </small>
+                                </p>
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-primary btn-sm" onclick="verNotasEstudiante(${estudiante.id}, '${estudiante.nombre}')">
+                                        <i class="bi bi-eye me-1"></i>Ver Notas
+                                    </button>
+                                    <button class="btn btn-success btn-sm" onclick="copiarCarnet('${estudiante.carnet}')">
+                                        <i class="bi bi-clipboard me-1"></i>Copiar Carnet
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    container.appendChild(col);
+                }
+            }
+            
+            // Actualizar contadores
+            actualizarContadores(estudiantes.length, sinNotas, conNotas);
+        }
+        
+        // Actualizar contadores
+        function actualizarContadores(total, sinNotas, conNotas) {
+            document.getElementById('contador-total').textContent = total;
+            document.getElementById('contador-sin-notas').textContent = sinNotas;
+            document.getElementById('contador-con-notas').textContent = conNotas;
+        }
+        
+        // Función para copiar carnet al portapapeles
+        function copiarCarnet(carnet) {
+            navigator.clipboard.writeText(carnet).then(() => {
+                showAlert(`Carnet ${carnet} copiado al portapapeles`, 'success');
+            }).catch(() => {
+                showAlert('Error al copiar el carnet', 'danger');
             });
         }
 
@@ -356,6 +499,30 @@
         document.addEventListener('DOMContentLoaded', () => {
             cargarDatosMaestro();
         });
+
+        // Event listener para el campo de búsqueda
+        document.addEventListener('DOMContentLoaded', function() {
+            const buscarEstudiantesMaestro = document.getElementById('buscar-estudiantes-maestro');
+            if (buscarEstudiantesMaestro) {
+                buscarEstudiantesMaestro.addEventListener('input', (e) => {
+                    filtrarEstudiantesMaestro(e.target.value);
+                });
+            }
+        });
+
+        function limpiarBusquedaEstudiantesMaestro() {
+            document.getElementById('buscar-estudiantes-maestro').value = '';
+            mostrarEstudiantesMaestro(estudiantesOriginales);
+        }
+
+        // Modificar la función cargarListaEstudiantes para guardar datos originales
+        async function cargarListaEstudiantes() {
+            // Guardar datos originales
+            estudiantesOriginales = estudiantesData;
+            
+            // Mostrar todos los estudiantes
+            await mostrarEstudiantesMaestro(estudiantesData);
+        }
     </script>
 </body>
 </html> 

@@ -34,10 +34,18 @@
             <div id="alert" class="alert" role="alert"></div>
             
             <form id="loginForm">
-                <div class="mb-3">
+                <!-- Campo de Email (solo para administradores) -->
+                <div class="mb-3" id="emailField" style="display: none;">
                     <label for="email" class="form-label">Correo Electrónico</label>
-                    <input type="email" class="form-control" id="email" name="email" required>
+                    <input type="email" class="form-control" id="email" name="email">
                 </div>
+                
+                <!-- Campo de Cédula (solo para representantes y maestros) -->
+                <div class="mb-3" id="cedulaField">
+                    <label for="cedula" class="form-label">Cédula de Identidad</label>
+                    <input type="text" class="form-control" id="cedula" name="cedula" placeholder="8 dígitos" maxlength="8" pattern="[0-9]{8}">
+                </div>
+                
                 <div class="mb-3">
                     <label for="password" class="form-label">Contraseña</label>
                     <input type="password" class="form-control" id="password" name="password" required>
@@ -66,6 +74,11 @@
         const submitBtn = document.getElementById('submitBtn');
         const btnText = document.getElementById('btnText');
         const btnSpinner = document.getElementById('btnSpinner');
+        const emailField = document.getElementById('emailField');
+        const cedulaField = document.getElementById('cedulaField');
+        const emailInput = document.getElementById('email');
+        const cedulaInput = document.getElementById('cedula');
+        const roleSelect = document.getElementById('role');
 
         function showAlert(message, type = 'danger') {
             alertDiv.className = `alert alert-${type}`;
@@ -89,6 +102,31 @@
             }
         }
 
+        // Función para cambiar campos según el rol
+        function cambiarCampos() {
+            const role = roleSelect.value;
+            
+            if (role === 'admin') {
+                emailField.style.display = 'block';
+                cedulaField.style.display = 'none';
+                emailInput.required = true;
+                cedulaInput.required = false;
+                cedulaInput.value = '';
+            } else {
+                emailField.style.display = 'none';
+                cedulaField.style.display = 'block';
+                emailInput.required = false;
+                cedulaInput.required = true;
+                emailInput.value = '';
+            }
+        }
+
+        // Evento para cambiar campos cuando cambia el rol
+        roleSelect.addEventListener('change', cambiarCampos);
+
+        // Inicializar campos
+        cambiarCampos();
+
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -96,11 +134,19 @@
             setLoading(true);
 
             const formData = new FormData(loginForm);
+            const role = formData.get('role');
+            
             const data = {
-                email: formData.get('email'),
                 password: formData.get('password'),
-                role: formData.get('role')
+                role: role
             };
+
+            // Añadir email o cédula según el rol
+            if (role === 'admin') {
+                data.email = formData.get('email');
+            } else {
+                data.cedula = formData.get('cedula');
+            }
 
             try {
                 const response = await fetch('/login', {

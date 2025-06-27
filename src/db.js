@@ -486,15 +486,13 @@ const generarCedulaRepresentante = async () => {
 
 // Función para generar carnet único
 const generarCarnetUnico = async () => {
-  const año = new Date().getFullYear();
   let carnet;
   let existe = true;
   const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
   
-  // Generar carnet hasta que sea único
+  // Generar carnet de 6 dígitos hasta que sea único
   while (existe) {
-    const numero = Math.floor(Math.random() * 9000) + 1000; // Número de 4 dígitos
-    carnet = `COLEGIO-${año}-${numero}`;
+    carnet = Math.floor(100000 + Math.random() * 900000).toString(); // Número de 6 dígitos (100000-999999)
     
     if (isProduction) {
       const result = await pool.query('SELECT id FROM estudiantes WHERE carnet = $1', [carnet]);

@@ -43,6 +43,13 @@
         <div class="container-fluid">
             <a class="navbar-brand" href="#">Panel Admin</a>
             <div class="d-flex">
+                <span class="navbar-text me-3" id="admin-info">
+                    <i class="bi bi-person-circle me-1"></i>
+                    <span id="admin-nombre">Cargando...</span>
+                </span>
+                <button class="btn btn-outline-light me-2" onclick="forzarRecarga()" title="Recargar datos">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
                 <a href="/logout" class="btn btn-outline-light">Cerrar Sesión</a>
             </div>
         </div>
@@ -341,6 +348,18 @@
                 </h2>
                 <div id="collapseListaEstudiantes" class="accordion-collapse collapse" aria-labelledby="headingListaEstudiantes" data-bs-parent="#adminAccordion">
                     <div class="accordion-body">
+                        <!-- Campo de búsqueda para estudiantes -->
+                        <div class="mb-3">
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                <input type="text" class="form-control" id="buscar-estudiantes" placeholder="Buscar estudiantes por nombre, carnet o cédula...">
+                                <button class="btn btn-outline-secondary" type="button" onclick="limpiarBusquedaEstudiantes()">
+                                    <i class="bi bi-x-circle"></i>
+                                </button>
+                            </div>
+                        </div>
                         <div style="max-height: 400px; overflow-y: auto;">
                             <ul class="list-group" id="lista-estudiantes">
                                 <!-- La lista se llenará dinámicamente -->
@@ -359,6 +378,24 @@
                 </h2>
                 <div id="collapseListaRepresentantes" class="accordion-collapse collapse" aria-labelledby="headingListaRepresentantes" data-bs-parent="#adminAccordion">
                     <div class="accordion-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="mb-0">Lista de Representantes</h6>
+                            <button class="btn btn-sm btn-outline-primary" onclick="recargarRepresentantes()">
+                                <i class="bi bi-arrow-clockwise me-1"></i>Recargar
+                            </button>
+                        </div>
+                        <!-- Campo de búsqueda para representantes -->
+                        <div class="mb-3">
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                <input type="text" class="form-control" id="buscar-representantes" placeholder="Buscar representantes por nombre, cédula o email...">
+                                <button class="btn btn-outline-secondary" type="button" onclick="limpiarBusquedaRepresentantes()">
+                                    <i class="bi bi-x-circle"></i>
+                                </button>
+                            </div>
+                        </div>
                         <ul class="list-group" id="lista-representantes">
                             <!-- La lista se llenará dinámicamente -->
                         </ul>
@@ -375,6 +412,18 @@
                 </h2>
                 <div id="collapseListaMaestros" class="accordion-collapse collapse" aria-labelledby="headingListaMaestros" data-bs-parent="#adminAccordion">
                     <div class="accordion-body">
+                        <!-- Campo de búsqueda para maestros -->
+                        <div class="mb-3">
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                <input type="text" class="form-control" id="buscar-maestros" placeholder="Buscar maestros por nombre, cédula, email o grado...">
+                                <button class="btn btn-outline-secondary" type="button" onclick="limpiarBusquedaMaestros()">
+                                    <i class="bi bi-x-circle"></i>
+                                </button>
+                            </div>
+                        </div>
                         <ul class="list-group" id="lista-maestros">
                             <!-- La lista se llenará dinámicamente -->
                         </ul>
@@ -394,10 +443,9 @@
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="mb-3">
-                                    <label for="mensualidad-estudiante" class="form-label">Seleccionar Estudiante:</label>
-                                    <select class="form-select" id="mensualidad-estudiante">
-                                        <option value="">Cargando estudiantes...</option>
-                                    </select>
+                                    <label for="mensualidad-carnet" class="form-label">Carnet del Estudiante:</label>
+                                    <input type="text" class="form-control" id="mensualidad-carnet" placeholder="Ingrese el carnet de 6 dígitos" maxlength="6" pattern="[0-9]{6}">
+                                    <div class="form-text">Ingrese el carnet de 6 dígitos del estudiante</div>
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -429,7 +477,6 @@
         const listaEstudiantes = document.getElementById('lista-estudiantes');
         const listaMaestros = document.getElementById('lista-maestros');
         const alertContainer = document.getElementById('alert-container');
-        const mensualidadEstudiante = document.getElementById('mensualidad-estudiante');
 
         // Función para mostrar alertas
         function showAlert(message, type = 'success') {
@@ -450,6 +497,7 @@
                 
                 if (response.status === 403) {
                     // Error de autenticación
+                    console.log('❌ Error de autenticación detectado');
                     manejarErrorAutenticacion();
                     return null;
                 }
@@ -462,6 +510,7 @@
                 return response;
             } catch (error) {
                 if (error.message.includes('403') || error.message.includes('Acceso no autorizado')) {
+                    console.log('❌ Error de autenticación en catch');
                     manejarErrorAutenticacion();
                     return null;
                 }
@@ -469,115 +518,196 @@
             }
         }
 
-        async function cargarEstudiantes() {
-            try {
-                const response = await fetchWithAuth('/api/estudiantes');
-                if (!response) return; // Error de autenticación manejado
-                
-                const estudiantes = await response.json();
+        // Variables globales para almacenar datos originales
+        let estudiantesOriginales = [];
+        let representantesOriginales = [];
+        let maestrosOriginales = [];
 
-                listaEstudiantes.innerHTML = '';
-                mensualidadEstudiante.innerHTML = '<option value="">Seleccione un estudiante</option>';
-                
-                if (estudiantes.length === 0) {
-                    listaEstudiantes.innerHTML = '<li class="list-group-item">No hay estudiantes registrados.</li>';
-                } else {
-                    estudiantes.forEach(est => {
-                        // Llenar la lista de estudiantes
-                        const li = document.createElement('li');
-                        li.className = 'list-group-item d-flex justify-content-between align-items-center';
-                        li.innerHTML = `
-                            <div>
-                                <strong>${est.nombre}</strong><br>
-                                <small class="text-muted">Carnet: ${est.carnet} | C.I: ${est.cedula || 'Sin cédula'} | Grado: ${est.grado} | Rep: ${est.cedula_representante}</small>
-                            </div>
-                            <div>
-                                <button class="btn btn-secondary btn-sm me-2" onclick='abrirModalGestionarNotas(${est.id}, "${est.nombre}")'>Notas</button>
-                                <button class="btn btn-warning btn-sm me-2" onclick='abrirModalEditarEstudiante(${JSON.stringify(est)})'>Editar</button>
-                                <button class="btn btn-danger btn-sm" onclick="eliminarEstudiante(${est.id}, '${est.nombre}')">Eliminar</button>
-                            </div>
-                        `;
-                        listaEstudiantes.appendChild(li);
-
-                        // Llenar el select de mensualidades
-                        const option = document.createElement('option');
-                        option.value = est.id;
-                        option.textContent = `${est.nombre} - ${est.grado}`;
-                        mensualidadEstudiante.appendChild(option);
-                    });
-                }
-            } catch (error) {
-                showAlert(error.message, 'danger');
-            }
+        // Función para forzar recarga de todas las listas
+        async function forzarRecarga() {
+            await Promise.all([
+                cargarEstudiantes(),
+                cargarRepresentantes(),
+                cargarMaestros()
+            ]);
+            showAlert('Datos recargados exitosamente', 'success');
         }
 
-        // Cargar representantes al iniciar la página
-        async function cargarRepresentantes() {
-            try {
-                const response = await fetch('/api/representantes');
-                if (!response.ok) throw new Error('No se pudo cargar la lista.');
-                const representantes = await response.json();
-
-                listaRepresentantes.innerHTML = '';
-                
-                if (representantes.length === 0) {
-                    listaRepresentantes.innerHTML = '<li class="list-group-item">No hay representantes registrados.</li>';
-                } else {
-                    representantes.forEach(rep => {
-                        // Llenar la lista
-                        const li = document.createElement('li');
-                        li.className = 'list-group-item d-flex justify-content-between align-items-center';
-                        li.innerHTML = `
-                            <div>
-                                <strong>${rep.nombre}</strong><br>
-                                <small class="text-muted">Cédula: ${rep.cedula} | Email: ${rep.email}</small>
-                            </div>
-                            <div>
-                                <button class="btn btn-warning btn-sm me-2" onclick='abrirModalEditarRep(${JSON.stringify(rep)})'>Editar</button>
-                                <button class="btn btn-danger btn-sm" onclick="eliminarRepresentante(${rep.id}, '${rep.nombre}')">Eliminar</button>
-                            </div>
-                        `;
-                        listaRepresentantes.appendChild(li);
-                    });
-                }
-            } catch (error) {
-                showAlert(error.message, 'danger');
-            }
+        // Función para recargar todas las listas
+        async function recargarTodasLasListas() {
+            await Promise.all([
+                cargarEstudiantes(),
+                cargarRepresentantes(),
+                cargarMaestros()
+            ]);
         }
 
-        // Cargar maestros al iniciar la página
-        async function cargarMaestros() {
-            try {
-                const response = await fetch('/api/maestros');
-                if (!response.ok) throw new Error('No se pudo cargar la lista de maestros.');
-                const maestros = await response.json();
-
-                listaMaestros.innerHTML = '';
-                
-                if (maestros.length === 0) {
-                    listaMaestros.innerHTML = '<li class="list-group-item">No hay maestros registrados.</li>';
-                } else {
-                    maestros.forEach(maestro => {
-                        // Llenar la lista
-                        const li = document.createElement('li');
-                        li.className = 'list-group-item d-flex justify-content-between align-items-center';
-                        li.innerHTML = `
-                            <div>
-                                <strong>${maestro.nombre} ${maestro.apellido}</strong><br>
-                                <small class="text-muted">Cédula: ${maestro.cedula} | Email: ${maestro.email} | Grado: ${maestro.grado_asignado}</small>
-                            </div>
-                            <div>
-                                <button class="btn btn-warning btn-sm me-2" onclick='abrirModalEditarMaestro(${JSON.stringify(maestro)})'>Editar</button>
-                                <button class="btn btn-danger btn-sm" onclick="eliminarMaestro(${maestro.id}, '${maestro.nombre} ${maestro.apellido}')">Eliminar</button>
-                            </div>
-                        `;
-                        listaMaestros.appendChild(li);
-                    });
-                }
-            } catch (error) {
-                showAlert(error.message, 'danger');
+        // Funciones de búsqueda para estudiantes
+        function filtrarEstudiantes(termino) {
+            if (!termino.trim()) {
+                mostrarEstudiantes(estudiantesOriginales);
+                return;
             }
+            
+            const filtrados = estudiantesOriginales.filter(est => 
+                est.nombre.toLowerCase().includes(termino.toLowerCase()) ||
+                est.carnet.toString().includes(termino) ||
+                (est.cedula && est.cedula.toString().includes(termino))
+            );
+            
+            mostrarEstudiantes(filtrados);
         }
+
+        function mostrarEstudiantes(estudiantes) {
+            listaEstudiantes.innerHTML = '';
+            
+            if (estudiantes.length === 0) {
+                listaEstudiantes.innerHTML = '<li class="list-group-item">No se encontraron estudiantes.</li>';
+                return;
+            }
+            
+            estudiantes.forEach(est => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                li.innerHTML = `
+                    <div>
+                        <strong>${est.nombre}</strong><br>
+                        <small class="text-muted">Carnet: ${est.carnet} | C.I: ${est.cedula || 'Sin cédula'} | Grado: ${est.grado} | Rep: ${est.cedula_representante}</small>
+                    </div>
+                    <div>
+                        <button class="btn btn-secondary btn-sm me-2" onclick='abrirModalGestionarNotas(${est.id}, "${est.nombre}")'>Notas</button>
+                        <button class="btn btn-warning btn-sm me-2" onclick='abrirModalEditarEstudiante(${JSON.stringify(est)})'>Editar</button>
+                        <button class="btn btn-danger btn-sm" onclick="eliminarEstudiante(${est.id}, '${est.nombre}')">Eliminar</button>
+                    </div>
+                `;
+                listaEstudiantes.appendChild(li);
+            });
+        }
+
+        function limpiarBusquedaEstudiantes() {
+            document.getElementById('buscar-estudiantes').value = '';
+            mostrarEstudiantes(estudiantesOriginales);
+        }
+
+        // Funciones de búsqueda para representantes
+        function filtrarRepresentantes(termino) {
+            if (!termino.trim()) {
+                mostrarRepresentantes(representantesOriginales);
+                return;
+            }
+            
+            const filtrados = representantesOriginales.filter(rep => 
+                rep.nombre.toLowerCase().includes(termino.toLowerCase()) ||
+                rep.cedula.toString().includes(termino) ||
+                rep.email.toLowerCase().includes(termino.toLowerCase())
+            );
+            
+            mostrarRepresentantes(filtrados);
+        }
+
+        function mostrarRepresentantes(representantes) {
+            listaRepresentantes.innerHTML = '';
+            
+            if (representantes.length === 0) {
+                listaRepresentantes.innerHTML = '<li class="list-group-item">No se encontraron representantes.</li>';
+                return;
+            }
+            
+            representantes.forEach(rep => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                li.innerHTML = `
+                    <div>
+                        <strong>${rep.nombre}</strong><br>
+                        <small class="text-muted">Cédula: ${rep.cedula} | Email: ${rep.email}</small>
+                    </div>
+                    <div>
+                        <button class="btn btn-warning btn-sm me-2" onclick='abrirModalEditarRep(${JSON.stringify(rep)})'>Editar</button>
+                        <button class="btn btn-danger btn-sm" onclick="eliminarRepresentante(${rep.id}, '${rep.nombre}')">Eliminar</button>
+                    </div>
+                `;
+                listaRepresentantes.appendChild(li);
+            });
+        }
+
+        function limpiarBusquedaRepresentantes() {
+            document.getElementById('buscar-representantes').value = '';
+            mostrarRepresentantes(representantesOriginales);
+        }
+
+        // Funciones de búsqueda para maestros
+        function filtrarMaestros(termino) {
+            if (!termino.trim()) {
+                mostrarMaestros(maestrosOriginales);
+                return;
+            }
+            
+            const filtrados = maestrosOriginales.filter(maestro => 
+                `${maestro.nombre} ${maestro.apellido}`.toLowerCase().includes(termino.toLowerCase()) ||
+                maestro.cedula.toString().includes(termino) ||
+                maestro.email.toLowerCase().includes(termino.toLowerCase()) ||
+                maestro.grado_asignado.toLowerCase().includes(termino.toLowerCase())
+            );
+            
+            mostrarMaestros(filtrados);
+        }
+
+        function mostrarMaestros(maestros) {
+            listaMaestros.innerHTML = '';
+            
+            if (maestros.length === 0) {
+                listaMaestros.innerHTML = '<li class="list-group-item">No se encontraron maestros.</li>';
+                return;
+            }
+            
+            maestros.forEach(maestro => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                li.innerHTML = `
+                    <div>
+                        <strong>${maestro.nombre} ${maestro.apellido}</strong><br>
+                        <small class="text-muted">Cédula: ${maestro.cedula} | Email: ${maestro.email} | Grado: ${maestro.grado_asignado}</small>
+                    </div>
+                    <div>
+                        <button class="btn btn-warning btn-sm me-2" onclick='abrirModalEditarMaestro(${JSON.stringify(maestro)})'>Editar</button>
+                        <button class="btn btn-danger btn-sm" onclick="eliminarMaestro(${maestro.id}, '${maestro.nombre} ${maestro.apellido}')">Eliminar</button>
+                    </div>
+                `;
+                listaMaestros.appendChild(li);
+            });
+        }
+
+        function limpiarBusquedaMaestros() {
+            document.getElementById('buscar-maestros').value = '';
+            mostrarMaestros(maestrosOriginales);
+        }
+
+        // Event listeners para los campos de búsqueda
+        document.addEventListener('DOMContentLoaded', function() {
+            // Event listeners para búsqueda de estudiantes
+            const buscarEstudiantes = document.getElementById('buscar-estudiantes');
+            if (buscarEstudiantes) {
+                buscarEstudiantes.addEventListener('input', (e) => {
+                    filtrarEstudiantes(e.target.value);
+                });
+            }
+
+            // Event listeners para búsqueda de representantes
+            const buscarRepresentantes = document.getElementById('buscar-representantes');
+            if (buscarRepresentantes) {
+                buscarRepresentantes.addEventListener('input', (e) => {
+                    filtrarRepresentantes(e.target.value);
+                });
+            }
+
+            // Event listeners para búsqueda de maestros
+            const buscarMaestros = document.getElementById('buscar-maestros');
+            if (buscarMaestros) {
+                buscarMaestros.addEventListener('input', (e) => {
+                    filtrarMaestros(e.target.value);
+                });
+            }
+        });
 
         // Evento para registrar representante
         formRepresentante.addEventListener('submit', async (e) => {
@@ -614,7 +744,7 @@
 
                 showAlert('Representante registrado con éxito. Cédula: ' + data.cedula);
                 formRepresentante.reset();
-                cargarRepresentantes(); // Recargar la lista
+                await recargarTodasLasListas(); // Recargar todas las listas
                 
             } catch (error) {
                 console.error('Error al registrar representante:', error);
@@ -658,7 +788,7 @@
 
                 showAlert('Maestro registrado con éxito. Cédula: ' + data.cedula);
                 formMaestro.reset();
-                cargarMaestros(); // Recargar la lista
+                await recargarTodasLasListas(); // Recargar todas las listas
                 
             } catch (error) {
                 console.error('Error al registrar maestro:', error);
@@ -709,7 +839,7 @@
                 document.getElementById('campo-cedula').style.display = 'none';
                 document.getElementById('est-cedula').required = false;
                 
-                cargarEstudiantes(); // Recargar la lista de estudiantes
+                await recargarTodasLasListas(); // Recargar todas las listas
             } catch (error) {
                 showAlert(error.message, 'danger');
             }
@@ -752,7 +882,7 @@
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.message);
                 showAlert(data.message);
-                cargarEstudiantes();
+                await recargarTodasLasListas();
             } catch (error) {
                 showAlert(error.message, 'danger');
             }
@@ -767,7 +897,7 @@
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.message);
                 showAlert(data.message);
-                cargarRepresentantes();
+                await recargarTodasLasListas();
             } catch (error) {
                 showAlert(error.message, 'danger');
             }
@@ -782,21 +912,42 @@
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.message);
                 showAlert(data.message);
-                cargarMaestros();
+                await recargarTodasLasListas();
             } catch (error) {
                 showAlert(error.message, 'danger');
             }
         }
 
         // Carga inicial
-        document.addEventListener('DOMContentLoaded', () => {
-            cargarRepresentantes();
-            cargarEstudiantes();
-            cargarMaestros();
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log('🚀 Iniciando panel de administrador...');
+            
+            // Cargar información del administrador
+            await cargarInfoAdmin();
+            
+            // Cargar todas las listas
+            await recargarTodasLasListas();
             
             // Configurar eventos para el manejo de cédula
             configurarCedulaEvents();
+            
+            console.log('✅ Panel de administrador iniciado correctamente');
         });
+
+        // Función para cargar información del administrador
+        async function cargarInfoAdmin() {
+            try {
+                const response = await fetchWithAuth('/api/session');
+                if (!response) return;
+                
+                const data = await response.json();
+                if (data.authenticated && data.user) {
+                    document.getElementById('admin-nombre').textContent = data.user.nombre || 'Administrador';
+                }
+            } catch (error) {
+                console.error('Error al cargar información del admin:', error);
+            }
+        }
 
         // Función para configurar eventos de cédula
         function configurarCedulaEvents() {
@@ -824,11 +975,11 @@
 
         // Función para generar mensualidades
         async function generarMensualidades() {
-            const estudianteId = mensualidadEstudiante.value;
+            const carnet = document.getElementById('mensualidad-carnet').value;
             const año = document.getElementById('mensualidad-año').value;
 
-            if (!estudianteId) {
-                showAlert('Por favor seleccione un estudiante.', 'warning');
+            if (!carnet) {
+                showAlert('Por favor ingrese el carnet del estudiante.', 'warning');
                 return;
             }
 
@@ -851,7 +1002,7 @@
                 const response = await fetch('/api/admin/generar-mensualidades', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ estudiante_id: parseInt(estudianteId), año: parseInt(año) })
+                    body: JSON.stringify({ carnet: carnet, año: parseInt(año) })
                 });
 
                 const data = await response.json();
@@ -870,7 +1021,7 @@
                 }
 
                 showAlert(mensaje, 'success');
-                mensualidadEstudiante.value = '';
+                document.getElementById('mensualidad-carnet').value = '';
                 
             } catch (error) {
                 console.error('Error al generar mensualidades:', error);
@@ -880,6 +1031,113 @@
                 const btnGenerar = document.querySelector('button[onclick="generarMensualidades()"]');
                 btnGenerar.innerHTML = '<i class="bi bi-calendar-plus"></i> Generar Mensualidades';
                 btnGenerar.disabled = false;
+            }
+        }
+
+        // Modificar las funciones de carga para guardar los datos originales
+        async function cargarEstudiantes() {
+            try {
+                console.log('🔄 Cargando estudiantes...');
+                const response = await fetchWithAuth('/api/estudiantes');
+                if (!response) {
+                    console.log('❌ Error de autenticación al cargar estudiantes');
+                    return;
+                }
+                
+                const estudiantes = await response.json();
+                console.log(`✅ Cargados ${estudiantes.length} estudiantes`);
+
+                // Guardar datos originales
+                estudiantesOriginales = estudiantes;
+                
+                // Mostrar todos los estudiantes
+                mostrarEstudiantes(estudiantes);
+            } catch (error) {
+                console.error('❌ Error al cargar estudiantes:', error);
+                showAlert('Error al cargar estudiantes: ' + error.message, 'danger');
+            }
+        }
+
+        // Cargar representantes al iniciar la página
+        async function cargarRepresentantes() {
+            try {
+                console.log('🔄 Cargando representantes...');
+                
+                // Usar fetch directo en lugar de fetchWithAuth para evitar problemas
+                const response = await fetch('/api/representantes');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const representantes = await response.json();
+                console.log(`✅ Cargados ${representantes.length} representantes`);
+                console.log('📋 Lista de representantes:', representantes.map(r => `${r.nombre} (${r.cedula})`));
+
+                // Guardar datos originales
+                representantesOriginales = representantes;
+                
+                // Mostrar todos los representantes
+                mostrarRepresentantes(representantes);
+                
+                // Verificar si Vanessa Quiñones está en la lista
+                const vanessa = representantes.find(r => r.nombre.includes('Vanessa') || r.nombre.includes('Quiñones'));
+                if (vanessa) {
+                    console.log('✅ Vanessa Quiñones encontrada en la lista:', vanessa);
+                } else {
+                    console.log('❌ Vanessa Quiñones NO encontrada en la lista');
+                }
+                
+            } catch (error) {
+                console.error('❌ Error al cargar representantes:', error);
+                showAlert('Error al cargar representantes: ' + error.message, 'danger');
+                
+                // Mostrar error en la lista también
+                listaRepresentantes.innerHTML = `<li class="list-group-item text-danger">Error al cargar: ${error.message}</li>`;
+            }
+        }
+
+        // Cargar maestros al iniciar la página
+        async function cargarMaestros() {
+            try {
+                console.log('🔄 Cargando maestros...');
+                const response = await fetchWithAuth('/api/maestros');
+                if (!response) {
+                    console.log('❌ Error de autenticación al cargar maestros');
+                    return;
+                }
+                
+                const maestros = await response.json();
+                console.log(`✅ Cargados ${maestros.length} maestros`);
+
+                // Guardar datos originales
+                maestrosOriginales = maestros;
+                
+                // Mostrar todos los maestros
+                mostrarMaestros(maestros);
+            } catch (error) {
+                console.error('❌ Error al cargar maestros:', error);
+                showAlert('Error al cargar maestros: ' + error.message, 'danger');
+            }
+        }
+
+        // Función específica para recargar representantes
+        async function recargarRepresentantes() {
+            console.log('🔄 Recargando representantes específicamente...');
+            showAlert('Recargando representantes...', 'info');
+            
+            try {
+                // Limpiar la lista primero
+                listaRepresentantes.innerHTML = '<li class="list-group-item">Cargando representantes...</li>';
+                
+                // Recargar después de un pequeño delay
+                setTimeout(async () => {
+                    await cargarRepresentantes();
+                    showAlert('Representantes recargados exitosamente', 'success');
+                }, 300);
+                
+            } catch (error) {
+                console.error('❌ Error al recargar representantes:', error);
+                showAlert('Error al recargar representantes: ' + error.message, 'danger');
             }
         }
     </script>
@@ -986,8 +1244,7 @@
                 
                 editModal.hide();
                 showAlert('Datos actualizados con éxito.');
-                cargarRepresentantes();
-                cargarEstudiantes();
+                await recargarTodasLasListas();
             } catch (error) {
                 // Idealmente, mostrar este error dentro del modal
                 showAlert(error.message, 'danger');
