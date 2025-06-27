@@ -753,8 +753,15 @@ app.post('/api/admin/generar-mensualidades', auth('admin'), async (req, res) => 
             return res.status(400).json({ message: 'Solo se permiten mensualidades para el año 2025.' });
         }
 
+        // Determinar si estamos en producción (PostgreSQL) o desarrollo (SQLite)
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+
         // Verificar que el estudiante existe por carnet
-        const estudianteExiste = await db.query('SELECT id, nombre FROM estudiantes WHERE carnet = ?', [carnet]);
+        const estudianteQuery = isProduction ? 
+            'SELECT id, nombre FROM estudiantes WHERE carnet = $1' : 
+            'SELECT id, nombre FROM estudiantes WHERE carnet = ?';
+        
+        const estudianteExiste = await db.query(estudianteQuery, [carnet]);
         if (estudianteExiste.rows.length === 0) {
             return res.status(404).json({ message: 'No se encontró ningún estudiante con ese carnet.' });
         }
@@ -769,15 +776,23 @@ app.post('/api/admin/generar-mensualidades', auth('admin'), async (req, res) => 
         for (let mes of mesesEscolares) {
             try {
                 // Verificar si ya existe
-                const existe = await db.query('SELECT id FROM pagos WHERE id_estudiante = ? AND mes = ? AND año = ?', [estudiante.id, mes, año]);
+                const existeQuery = isProduction ? 
+                    'SELECT id FROM pagos WHERE id_estudiante = $1 AND mes = $2 AND año = $3' : 
+                    'SELECT id FROM pagos WHERE id_estudiante = ? AND mes = ? AND año = ?';
+                
+                const existe = await db.query(existeQuery, [estudiante.id, mes, año]);
                 if (existe.rows.length === 0) {
                     // Calcular fecha de vencimiento (último día del mes)
                     const fechaVencimiento = new Date(año, mes, 0);
                     
-                    await db.query(`
-                        INSERT INTO pagos (id_estudiante, mes, año, monto, estado, fecha_vencimiento)
-                        VALUES (?, ?, ?, ?, 'pendiente', ?)
-                    `, [estudiante.id, mes, año, 12480.00, fechaVencimiento]);
+                    // Construir la consulta INSERT según la base de datos
+                    const insertQuery = isProduction ? 
+                        `INSERT INTO pagos (id_estudiante, mes, año, monto, estado, fecha_vencimiento)
+                         VALUES ($1, $2, $3, $4, 'pendiente', $5)` : 
+                        `INSERT INTO pagos (id_estudiante, mes, año, monto, estado, fecha_vencimiento)
+                         VALUES (?, ?, ?, ?, 'pendiente', ?)`;
+                    
+                    await db.query(insertQuery, [estudiante.id, mes, año, 12480.00, fechaVencimiento]);
                     
                     mensualidadesGeneradas++;
                 } else {
