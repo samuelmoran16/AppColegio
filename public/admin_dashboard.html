@@ -8,6 +8,37 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
 </head>
 <body>
+    <!-- Script para verificar sesión al cargar -->
+    <script>
+        // Verificar sesión al cargar la página
+        async function verificarSesion() {
+            try {
+                const response = await fetch('/api/session');
+                const data = await response.json();
+                
+                if (!data.authenticated || data.user.role !== 'admin') {
+                    // Redirigir al login si no hay sesión válida
+                    window.location.href = '/login.html';
+                    return;
+                }
+                
+                console.log('✅ Sesión válida:', data.user);
+            } catch (error) {
+                console.error('Error verificando sesión:', error);
+                window.location.href = '/login.html';
+            }
+        }
+        
+        // Ejecutar verificación al cargar
+        verificarSesion();
+        
+        // Función global para manejar errores de autenticación
+        function manejarErrorAutenticacion() {
+            alert('Su sesión ha expirado. Será redirigido al login.');
+            window.location.href = '/login.html';
+        }
+    </script>
+
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container-fluid">
             <a class="navbar-brand" href="#">Panel Admin</a>
@@ -412,10 +443,37 @@
             alertContainer.append(wrapper);
         }
 
+        // Función para manejar errores de fetch con autenticación
+        async function fetchWithAuth(url, options = {}) {
+            try {
+                const response = await fetch(url, options);
+                
+                if (response.status === 403) {
+                    // Error de autenticación
+                    manejarErrorAutenticacion();
+                    return null;
+                }
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.message || `Error ${response.status}: ${response.statusText}`);
+                }
+                
+                return response;
+            } catch (error) {
+                if (error.message.includes('403') || error.message.includes('Acceso no autorizado')) {
+                    manejarErrorAutenticacion();
+                    return null;
+                }
+                throw error;
+            }
+        }
+
         async function cargarEstudiantes() {
             try {
-                const response = await fetch('/api/estudiantes');
-                if (!response.ok) throw new Error('No se pudo cargar la lista de estudiantes.');
+                const response = await fetchWithAuth('/api/estudiantes');
+                if (!response) return; // Error de autenticación manejado
+                
                 const estudiantes = await response.json();
 
                 listaEstudiantes.innerHTML = '';

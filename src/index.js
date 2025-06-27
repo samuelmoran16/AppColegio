@@ -43,8 +43,10 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: { 
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 24 * 60 * 60 * 1000 // 24 horas
+    secure: false,
+    maxAge: 24 * 60 * 60 * 1000,
+    httpOnly: true,
+    sameSite: 'lax'
   }
 }));
 
@@ -118,11 +120,32 @@ app.get('/logout', (req, res) => {
     });
 });
 
+// Ruta para verificar estado de sesión
+app.get('/api/session', (req, res) => {
+    if (req.session.user) {
+        res.json({ 
+            authenticated: true, 
+            user: req.session.user 
+        });
+    } else {
+        res.status(401).json({ 
+            authenticated: false, 
+            message: 'No hay sesión activa' 
+        });
+    }
+});
+
 // Middleware para proteger rutas optimizado
 const auth = (role) => (req, res, next) => {
+    console.log('🔐 Verificando autenticación para rol:', role);
+    console.log('👤 Usuario en sesión:', req.session.user);
+    
     if (req.session.user && req.session.user.role === role) {
+        console.log('✅ Autenticación exitosa para rol:', role);
         return next();
     }
+    
+    console.log('❌ Autenticación fallida para rol:', role);
     
     if (req.accepts('json')) {
         res.status(403).json({ message: 'Acceso no autorizado. Por favor, inicie sesión de nuevo.' });
