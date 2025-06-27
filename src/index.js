@@ -46,12 +46,15 @@ app.use(session({
 app.post('/login', async (req, res) => {
     const { email, password, role } = req.body;
     
+    console.log('Intento de login:', { email, role }); // Log para debug
+    
     let tableName = '';
     if (role === 'admin') tableName = 'administradores';
     if (role === 'representante') tableName = 'representantes';
     if (role === 'maestro') tableName = 'maestros';
 
     if (!tableName) {
+        console.log('Rol no válido:', role);
         return res.status(400).send('Rol no válido');
     }
     
@@ -61,26 +64,41 @@ app.post('/login', async (req, res) => {
             `SELECT * FROM ${tableName} WHERE email = $1` : 
             `SELECT * FROM ${tableName} WHERE email = ?`;
         
+        console.log('Ejecutando query:', query, 'con email:', email);
+        
         const result = await db.query(query, [email]);
+        console.log('Resultado de la consulta:', result.rows.length, 'filas encontradas');
+        
         const user = result.rows[0];
 
-        if (!user) return res.status(401).send('Credenciales incorrectas');
+        if (!user) {
+            console.log('Usuario no encontrado');
+            return res.status(401).send('Credenciales incorrectas');
+        }
         
+        console.log('Usuario encontrado, verificando contraseña...');
         const match = await bcrypt.compare(password, user.password);
+        
         if (match) {
+            console.log('Contraseña correcta, creando sesión...');
             req.session.user = { id: user.id, email: user.email, role: role };
+            
             if (role === 'admin') {
+                console.log('Redirigiendo a admin dashboard');
                 res.redirect('/admin/dashboard');
             } else if (role === 'maestro') {
+                console.log('Redirigiendo a maestro dashboard');
                 res.redirect('/maestro/dashboard');
             } else {
+                console.log('Redirigiendo a representante dashboard');
                 res.redirect('/representante/dashboard');
             }
         } else {
+            console.log('Contraseña incorrecta');
             res.status(401).send('Credenciales incorrectas');
         }
     } catch (err) {
-        console.error(err);
+        console.error('Error en login:', err);
         res.status(500).send('Error del servidor');
     }
 });
@@ -773,7 +791,7 @@ app.post('/api/representante/pagos', auth('representante'), async (req, res) => 
         }
 
         // Verificar que el estudiante pertenece al representante
-        const verificacion = await db.query('SELECT id FROM estudiantes WHERE id = ? AND id_representante = ?', [estudiante_id, id_representante]);
+        const verificacion = await db.query('SELECT id FROM estudiantes WHERE id = ? AND cedula_representante = (SELECT cedula FROM representantes WHERE id = ?)', [estudiante_id, id_representante]);
         if (verificacion.rows.length === 0) {
             return res.status(403).json({ message: 'No tiene permiso para realizar pagos para este estudiante.' });
         }
@@ -1070,4 +1088,4 @@ app.get('/', (req, res) => {
 
 app.listen(port, () => {
   console.log(`Servidor escuchando en http://localhost:${port}`);
-}); 
+});
