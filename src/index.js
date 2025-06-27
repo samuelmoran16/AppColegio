@@ -1337,6 +1337,10 @@ app.get('/', (req, res) => {
   res.redirect('/login.html');
 });
 
-app.listen(port, () => {
-  console.log(`Servidor escuchando en http://localhost:${port}`);
+app.listen(port, '0.0.0.0', () => {
+  console.log(`🌐 Servidor escuchando en:`);
+  console.log(`   Local: http://localhost:${port}`);
+  console.log(`   Red local: http://192.168.0.169:${port}`);
+  console.log(`   Internet: http://186.24.140.90:${port}`);
+  console.log(`📱 Ahora puedes acceder desde cualquier dispositivo conectado a tu red móvil`);
 });
