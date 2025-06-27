@@ -267,6 +267,8 @@ app.post('/api/representantes', auth('admin'), async (req, res) => {
     }
     
     try {
+        console.log('🔍 Verificando duplicados para representante:', { cedula, email });
+        
         // Verificar si la cédula ya existe
         const cedulaQuery = isProduction() ? 
             'SELECT id FROM representantes WHERE cedula = $1' : 
@@ -274,6 +276,7 @@ app.post('/api/representantes', auth('admin'), async (req, res) => {
         const cedulaResult = await db.query(cedulaQuery, [cedula]);
         
         if (cedulaResult.rows.length > 0) {
+            console.log('❌ Cédula duplicada encontrada:', cedula);
             return res.status(409).json({ message: 'La cédula ya está registrada por otro representante.' });
         }
         
@@ -284,8 +287,11 @@ app.post('/api/representantes', auth('admin'), async (req, res) => {
         const emailResult = await db.query(emailQuery, [email]);
         
         if (emailResult.rows.length > 0) {
+            console.log('❌ Email duplicado encontrado:', email);
             return res.status(409).json({ message: 'El correo electrónico ya está registrado por otro representante.' });
         }
+        
+        console.log('✅ No se encontraron duplicados, procediendo con el registro...');
         
         const hash = await bcrypt.hash(password, 10);
         
@@ -293,11 +299,39 @@ app.post('/api/representantes', auth('admin'), async (req, res) => {
             'INSERT INTO representantes (cedula, nombre, email, password) VALUES ($1, $2, $3, $4) RETURNING id, cedula, nombre, email' :
             'INSERT INTO representantes (cedula, nombre, email, password) VALUES (?, ?, ?, ?) RETURNING id, cedula, nombre, email';
         
+        console.log('📝 Ejecutando query de inserción...');
         const result = await db.query(query, [cedula, nombre, email, hash]);
+        
+        console.log('✅ Representante registrado exitosamente:', result.rows[0]);
         res.status(201).json(result.rows[0]);
     } catch (err) {
-        console.error('Error registrando representante:', err);
-        res.status(500).json({ message: 'Error al registrar el representante' });
+        console.error('❌ Error registrando representante:', err);
+        console.error('❌ Detalles del error:', {
+            message: err.message,
+            code: err.code,
+            detail: err.detail,
+            hint: err.hint
+        });
+        
+        // Proporcionar mensajes más específicos según el tipo de error
+        if (err.code === '23505') { // PostgreSQL unique constraint
+            if (err.detail && err.detail.includes('cedula')) {
+                return res.status(409).json({ message: 'La cédula ya está registrada por otro representante.' });
+            } else if (err.detail && err.detail.includes('email')) {
+                return res.status(409).json({ message: 'El correo electrónico ya está registrado por otro representante.' });
+            } else {
+                return res.status(409).json({ message: 'La cédula o el correo electrónico ya están registrados.' });
+            }
+        } else if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') { // SQLite unique constraint
+            return res.status(409).json({ message: 'La cédula o el correo electrónico ya están registrados.' });
+        } else if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
+            return res.status(500).json({ message: 'Error de conexión con la base de datos. Intente nuevamente.' });
+        } else {
+            return res.status(500).json({ 
+                message: 'Error al registrar el representante',
+                details: process.env.NODE_ENV === 'development' ? err.message : 'Error interno del servidor'
+            });
+        }
     }
 });
 
@@ -1114,6 +1148,8 @@ app.post('/api/maestros', auth('admin'), async (req, res) => {
     }
     
     try {
+        console.log('🔍 Verificando duplicados para maestro:', { cedula, email });
+        
         // Verificar si la cédula ya existe
         const cedulaQuery = isProduction() ? 
             'SELECT id FROM maestros WHERE cedula = $1' : 
@@ -1121,6 +1157,7 @@ app.post('/api/maestros', auth('admin'), async (req, res) => {
         const cedulaResult = await db.query(cedulaQuery, [cedula]);
         
         if (cedulaResult.rows.length > 0) {
+            console.log('❌ Cédula duplicada encontrada:', cedula);
             return res.status(409).json({ message: 'La cédula ya está registrada por otro maestro.' });
         }
         
@@ -1131,8 +1168,11 @@ app.post('/api/maestros', auth('admin'), async (req, res) => {
         const emailResult = await db.query(emailQuery, [email]);
         
         if (emailResult.rows.length > 0) {
+            console.log('❌ Email duplicado encontrado:', email);
             return res.status(409).json({ message: 'El correo electrónico ya está registrado por otro maestro.' });
         }
+        
+        console.log('✅ No se encontraron duplicados, procediendo con el registro...');
         
         const hash = await bcrypt.hash(password, 10);
         
@@ -1141,11 +1181,39 @@ app.post('/api/maestros', auth('admin'), async (req, res) => {
             'INSERT INTO maestros (cedula, nombre, apellido, email, password, grado_asignado) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, cedula, nombre, apellido, email, grado_asignado' :
             'INSERT INTO maestros (cedula, nombre, apellido, email, password, grado_asignado) VALUES (?, ?, ?, ?, ?, ?) RETURNING id, cedula, nombre, apellido, email, grado_asignado';
         
+        console.log('📝 Ejecutando query de inserción...');
         const result = await db.query(query, [cedula, nombre, apellido, email, hash, grado_asignado]);
+        
+        console.log('✅ Maestro registrado exitosamente:', result.rows[0]);
         res.status(201).json(result.rows[0]);
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Error al registrar el maestro' });
+        console.error('❌ Error registrando maestro:', err);
+        console.error('❌ Detalles del error:', {
+            message: err.message,
+            code: err.code,
+            detail: err.detail,
+            hint: err.hint
+        });
+        
+        // Proporcionar mensajes más específicos según el tipo de error
+        if (err.code === '23505') { // PostgreSQL unique constraint
+            if (err.detail && err.detail.includes('cedula')) {
+                return res.status(409).json({ message: 'La cédula ya está registrada por otro maestro.' });
+            } else if (err.detail && err.detail.includes('email')) {
+                return res.status(409).json({ message: 'El correo electrónico ya está registrado por otro maestro.' });
+            } else {
+                return res.status(409).json({ message: 'La cédula o el correo electrónico ya están registrados.' });
+            }
+        } else if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') { // SQLite unique constraint
+            return res.status(409).json({ message: 'La cédula o el correo electrónico ya están registrados.' });
+        } else if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
+            return res.status(500).json({ message: 'Error de conexión con la base de datos. Intente nuevamente.' });
+        } else {
+            return res.status(500).json({ 
+                message: 'Error al registrar el maestro',
+                details: process.env.NODE_ENV === 'development' ? err.message : 'Error interno del servidor'
+            });
+        }
     }
 });
 
