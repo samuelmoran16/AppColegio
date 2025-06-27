@@ -267,6 +267,26 @@ app.post('/api/representantes', auth('admin'), async (req, res) => {
     }
     
     try {
+        // Verificar si la cédula ya existe
+        const cedulaQuery = isProduction() ? 
+            'SELECT id FROM representantes WHERE cedula = $1' : 
+            'SELECT id FROM representantes WHERE cedula = ?';
+        const cedulaResult = await db.query(cedulaQuery, [cedula]);
+        
+        if (cedulaResult.rows.length > 0) {
+            return res.status(409).json({ message: 'La cédula ya está registrada por otro representante.' });
+        }
+        
+        // Verificar si el email ya existe
+        const emailQuery = isProduction() ? 
+            'SELECT id FROM representantes WHERE email = $1' : 
+            'SELECT id FROM representantes WHERE email = ?';
+        const emailResult = await db.query(emailQuery, [email]);
+        
+        if (emailResult.rows.length > 0) {
+            return res.status(409).json({ message: 'El correo electrónico ya está registrado por otro representante.' });
+        }
+        
         const hash = await bcrypt.hash(password, 10);
         
         const query = isProduction() ? 
@@ -277,9 +297,6 @@ app.post('/api/representantes', auth('admin'), async (req, res) => {
         res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error('Error registrando representante:', err);
-        if (err.code === getUniqueConstraintError()) {
-            return res.status(409).json({ message: 'La cédula o el correo electrónico ya están registrados.' });
-        }
         res.status(500).json({ message: 'Error al registrar el representante' });
     }
 });
@@ -313,6 +330,18 @@ app.post('/api/estudiantes', auth('admin'), async (req, res) => {
             return res.status(404).json({ message: 'No se encontró ningún representante con esa cédula.' });
         }
         
+        // Si se proporciona cédula, verificar que no esté duplicada
+        if (cedula) {
+            const cedulaQuery = isProduction() ? 
+                'SELECT id FROM estudiantes WHERE cedula = $1' : 
+                'SELECT id FROM estudiantes WHERE cedula = ?';
+            const cedulaResult = await db.query(cedulaQuery, [cedula]);
+            
+            if (cedulaResult.rows.length > 0) {
+                return res.status(409).json({ message: 'La cédula ya está registrada por otro estudiante.' });
+            }
+        }
+        
         // Generar carnet único
         const carnet = await generarCarnetUnico();
         
@@ -324,9 +353,6 @@ app.post('/api/estudiantes', auth('admin'), async (req, res) => {
         res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error('Error registrando estudiante:', err);
-        if (err.code === getUniqueConstraintError()) { 
-            return res.status(409).json({ message: 'La cédula ya está registrada por otro estudiante.' });
-        }
         res.status(500).json({ message: 'Error al registrar el estudiante' });
     }
 });
@@ -1088,6 +1114,26 @@ app.post('/api/maestros', auth('admin'), async (req, res) => {
     }
     
     try {
+        // Verificar si la cédula ya existe
+        const cedulaQuery = isProduction() ? 
+            'SELECT id FROM maestros WHERE cedula = $1' : 
+            'SELECT id FROM maestros WHERE cedula = ?';
+        const cedulaResult = await db.query(cedulaQuery, [cedula]);
+        
+        if (cedulaResult.rows.length > 0) {
+            return res.status(409).json({ message: 'La cédula ya está registrada por otro maestro.' });
+        }
+        
+        // Verificar si el email ya existe
+        const emailQuery = isProduction() ? 
+            'SELECT id FROM maestros WHERE email = $1' : 
+            'SELECT id FROM maestros WHERE email = ?';
+        const emailResult = await db.query(emailQuery, [email]);
+        
+        if (emailResult.rows.length > 0) {
+            return res.status(409).json({ message: 'El correo electrónico ya está registrado por otro maestro.' });
+        }
+        
         const hash = await bcrypt.hash(password, 10);
         
         const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
@@ -1099,9 +1145,6 @@ app.post('/api/maestros', auth('admin'), async (req, res) => {
         res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error(err);
-        if (err.code === getUniqueConstraintError()) {
-            return res.status(409).json({ message: 'La cédula o el correo electrónico ya están registrados.' });
-        }
         res.status(500).json({ message: 'Error al registrar el maestro' });
     }
 });
