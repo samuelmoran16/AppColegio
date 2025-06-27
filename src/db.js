@@ -56,7 +56,7 @@ const initDB = async () => {
 
       await pool.query(`CREATE TABLE IF NOT EXISTS representantes (
         id SERIAL PRIMARY KEY,
-        cedula VARCHAR(8) UNIQUE NOT NULL,
+        cedula VARCHAR(10) UNIQUE NOT NULL,
         nombre VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL
@@ -64,7 +64,7 @@ const initDB = async () => {
 
       await pool.query(`CREATE TABLE IF NOT EXISTS maestros (
         id SERIAL PRIMARY KEY,
-        cedula VARCHAR(8) UNIQUE NOT NULL,
+        cedula VARCHAR(10) UNIQUE NOT NULL,
         nombre VARCHAR(255) NOT NULL,
         apellido VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
@@ -79,7 +79,7 @@ const initDB = async () => {
         cedula VARCHAR(20),
         fecha_nacimiento DATE,
         grado VARCHAR(50),
-        cedula_representante VARCHAR(8) REFERENCES representantes(cedula)
+        cedula_representante VARCHAR(10) REFERENCES representantes(cedula)
       )`);
 
       await pool.query(`CREATE TABLE IF NOT EXISTS notas (
@@ -537,7 +537,7 @@ const migrarTablaRepresentantes = async () => {
           console.log('Migrando tabla de representantes para añadir cédulas...');
           
           // Añadir la columna cedula
-          await pool.query('ALTER TABLE representantes ADD COLUMN cedula VARCHAR(8) UNIQUE');
+          await pool.query('ALTER TABLE representantes ADD COLUMN cedula VARCHAR(10) UNIQUE');
           
           // Generar cédulas para representantes existentes
           const representantes = await pool.query('SELECT id FROM representantes ORDER BY id');
@@ -627,7 +627,7 @@ const migrarRepresentanteEstudiante = async () => {
         console.log('Migrando tabla de estudiantes para usar cedula_representante...');
         
         // Añadir la columna cedula_representante
-        await pool.query('ALTER TABLE estudiantes ADD COLUMN cedula_representante VARCHAR(8) REFERENCES representantes(cedula)');
+        await pool.query('ALTER TABLE estudiantes ADD COLUMN cedula_representante VARCHAR(10) REFERENCES representantes(cedula)');
         
         // Migrar datos existentes
         const estudiantes = await pool.query('SELECT id, id_representante FROM estudiantes WHERE id_representante IS NOT NULL');
