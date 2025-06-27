@@ -76,7 +76,7 @@ async function forzarCorreccionPostgreSQL() {
         
         // 5. Probar inserción con cédula de 7 dígitos
         console.log('\n🧪 Probando inserción con cédula de 7 dígitos...');
-        const cedula7 = '1234567';
+        const cedula7 = Math.floor(Math.random() * 9000000) + 1000000; // 7 dígitos únicos
         const emailTest = `test.7digitos.${Date.now()}@postgresql.com`;
         
         try {
@@ -84,22 +84,23 @@ async function forzarCorreccionPostgreSQL() {
                 INSERT INTO representantes (cedula, nombre, email, password) 
                 VALUES ($1, $2, $3, $4) 
                 RETURNING id, cedula, nombre, email
-            `, [cedula7, 'Test 7 Dígitos', emailTest, 'test123']);
+            `, [cedula7.toString(), 'Test 7 Dígitos', emailTest, 'test123']);
             
             console.log('✅ Inserción exitosa con 7 dígitos:', insertResult.rows[0]);
             
             // Limpiar el registro de prueba
-            await client.query('DELETE FROM representantes WHERE cedula = $1', [cedula7]);
+            await client.query('DELETE FROM representantes WHERE cedula = $1', [cedula7.toString()]);
             console.log('🧹 Registro de prueba eliminado');
             
         } catch (insertError) {
             console.log('❌ Error en inserción con 7 dígitos:', insertError.message);
             console.log('   Código de error:', insertError.code);
+            console.log('   Detalles:', insertError.detail);
         }
         
         // 6. Probar inserción con cédula de 8 dígitos
         console.log('\n🧪 Probando inserción con cédula de 8 dígitos...');
-        const cedula8 = '12345678';
+        const cedula8 = Math.floor(Math.random() * 90000000) + 10000000; // 8 dígitos únicos
         const emailTest2 = `test.8digitos.${Date.now()}@postgresql.com`;
         
         try {
@@ -107,17 +108,18 @@ async function forzarCorreccionPostgreSQL() {
                 INSERT INTO representantes (cedula, nombre, email, password) 
                 VALUES ($1, $2, $3, $4) 
                 RETURNING id, cedula, nombre, email
-            `, [cedula8, 'Test 8 Dígitos', emailTest2, 'test123']);
+            `, [cedula8.toString(), 'Test 8 Dígitos', emailTest2, 'test123']);
             
             console.log('✅ Inserción exitosa con 8 dígitos:', insertResult2.rows[0]);
             
             // Limpiar el registro de prueba
-            await client.query('DELETE FROM representantes WHERE cedula = $1', [cedula8]);
+            await client.query('DELETE FROM representantes WHERE cedula = $1', [cedula8.toString()]);
             console.log('🧹 Registro de prueba eliminado');
             
         } catch (insertError2) {
             console.log('❌ Error en inserción con 8 dígitos:', insertError2.message);
             console.log('   Código de error:', insertError2.code);
+            console.log('   Detalles:', insertError2.detail);
         }
         
         client.release();
