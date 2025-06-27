@@ -669,8 +669,10 @@ app.get('/api/representante/pagos', auth('representante'), async (req, res) => {
     try {
         const id_representante = req.session.user.id;
         
-        // Primero obtener la cédula del representante
+        // Determinar si estamos en producción (PostgreSQL) o desarrollo (SQLite)
         const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+        
+        // Primero obtener la cédula del representante
         const cedulaQuery = isProduction ? 
             'SELECT cedula FROM representantes WHERE id = $1' : 
             'SELECT cedula FROM representantes WHERE id = ?';
@@ -683,8 +685,26 @@ app.get('/api/representante/pagos', auth('representante'), async (req, res) => {
         const cedula_representante = cedulaResult.rows[0].cedula;
         
         // Obtener todos los hijos del representante con sus pagos
-        const result = await db.query(`
-            SELECT 
+        const pagosQuery = isProduction ? 
+            `SELECT 
+                e.id as estudiante_id,
+                e.carnet as estudiante_carnet,
+                e.nombre as estudiante_nombre,
+                e.cedula as estudiante_cedula,
+                e.grado,
+                p.id as pago_id,
+                p.mes,
+                p.año,
+                p.monto,
+                p.estado,
+                p.fecha_pago,
+                p.fecha_vencimiento,
+                p.concepto
+            FROM estudiantes e
+            LEFT JOIN pagos p ON e.id = p.id_estudiante
+            WHERE e.cedula_representante = $1
+            ORDER BY e.nombre, p.año DESC, p.mes DESC` :
+            `SELECT 
                 e.id as estudiante_id,
                 e.carnet as estudiante_carnet,
                 e.nombre as estudiante_nombre,
@@ -701,8 +721,9 @@ app.get('/api/representante/pagos', auth('representante'), async (req, res) => {
             FROM estudiantes e
             LEFT JOIN pagos p ON e.id = p.id_estudiante
             WHERE e.cedula_representante = ?
-            ORDER BY e.nombre, p.año DESC, p.mes DESC
-        `, [cedula_representante]);
+            ORDER BY e.nombre, p.año DESC, p.mes DESC`;
+        
+        const result = await db.query(pagosQuery, [cedula_representante]);
 
         // Organizar los datos por estudiante
         const estudiantes = {};
@@ -734,7 +755,7 @@ app.get('/api/representante/pagos', auth('representante'), async (req, res) => {
 
         res.json(Object.values(estudiantes));
     } catch (err) {
-        console.error(err);
+        console.error('Error al obtener pagos:', err);
         res.status(500).json({ message: 'Error al obtener los pagos.' });
     }
 });
@@ -917,19 +938,28 @@ app.post('/api/representante/pagos', auth('representante'), async (req, res) => 
         const { estudiante_id, mes, año } = req.body;
         const id_representante = req.session.user.id;
 
+        // Determinar si estamos en producción (PostgreSQL) o desarrollo (SQLite)
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+
         // Validaciones
         if (año !== 2025) {
             return res.status(400).json({ message: 'Solo se permiten pagos para el año 2025.' });
         }
 
         // Verificar que el estudiante pertenece al representante
-        const verificacion = await db.query('SELECT id FROM estudiantes WHERE id = ? AND cedula_representante = (SELECT cedula FROM representantes WHERE id = ?)', [estudiante_id, id_representante]);
+        const verificacionQuery = isProduction ? 
+            'SELECT id FROM estudiantes WHERE id = $1 AND cedula_representante = (SELECT cedula FROM representantes WHERE id = $2)' : 
+            'SELECT id FROM estudiantes WHERE id = ? AND cedula_representante = (SELECT cedula FROM representantes WHERE id = ?)';
+        const verificacion = await db.query(verificacionQuery, [estudiante_id, id_representante]);
         if (verificacion.rows.length === 0) {
             return res.status(403).json({ message: 'No tiene permiso para realizar pagos para este estudiante.' });
         }
 
         // Verificar si ya existe un pago para ese mes/año y su estado
-        const pagoExistente = await db.query('SELECT id, estado FROM pagos WHERE id_estudiante = ? AND mes = ? AND año = ?', [estudiante_id, mes, año]);
+        const pagoExistenteQuery = isProduction ? 
+            'SELECT id, estado FROM pagos WHERE id_estudiante = $1 AND mes = $2 AND año = $3' : 
+            'SELECT id, estado FROM pagos WHERE id_estudiante = ? AND mes = ? AND año = ?';
+        const pagoExistente = await db.query(pagoExistenteQuery, [estudiante_id, mes, año]);
         
         if (pagoExistente.rows.length === 0) {
             return res.status(404).json({ message: 'No se encontró una mensualidad pendiente para este mes. El administrador debe generar las mensualidades primero.' });
@@ -942,18 +972,29 @@ app.post('/api/representante/pagos', auth('representante'), async (req, res) => 
         }
 
         // Actualizar el pago existente como pagado
-        const result = await db.query(`
-            UPDATE pagos 
-            SET estado = 'pagado', fecha_pago = CURRENT_DATE
-            WHERE id = ?
-            RETURNING *
-        `, [pago.id]);
+        const updateQuery = isProduction ? 
+            `UPDATE pagos 
+             SET estado = 'pagado', fecha_pago = CURRENT_DATE
+             WHERE id = $1
+             RETURNING *` : 
+            `UPDATE pagos 
+             SET estado = 'pagado', fecha_pago = CURRENT_DATE
+             WHERE id = ?
+             RETURNING *`;
+        const result = await db.query(updateQuery, [pago.id]);
 
         const pagoActualizado = result.rows[0];
 
         // Obtener datos del estudiante y representante para la factura
-        const estudianteResult = await db.query('SELECT * FROM estudiantes WHERE id = ?', [estudiante_id]);
-        const representanteResult = await db.query('SELECT * FROM representantes WHERE id = ?', [id_representante]);
+        const estudianteQuery = isProduction ? 
+            'SELECT * FROM estudiantes WHERE id = $1' : 
+            'SELECT * FROM estudiantes WHERE id = ?';
+        const representanteQuery = isProduction ? 
+            'SELECT * FROM representantes WHERE id = $1' : 
+            'SELECT * FROM representantes WHERE id = ?';
+        
+        const estudianteResult = await db.query(estudianteQuery, [estudiante_id]);
+        const representanteResult = await db.query(representanteQuery, [id_representante]);
 
         const estudiante = estudianteResult.rows[0];
         const representante = representanteResult.rows[0];
@@ -966,7 +1007,7 @@ app.post('/api/representante/pagos', auth('representante'), async (req, res) => 
             factura_url: `/facturas/${facturaFilename}`
         });
     } catch (err) {
-        console.error(err);
+        console.error('Error al registrar pago:', err);
         res.status(500).json({ message: 'Error al registrar el pago.' });
     }
 });
