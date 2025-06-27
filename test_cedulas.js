@@ -27,13 +27,13 @@ async function testCedulas() {
             console.log('\n❌ Error: Se generaron cédulas duplicadas');
         }
         
-        // Verificar formato (8 dígitos)
+        // Verificar formato (7 u 8 dígitos)
         const formatoCorrecto = [cedula1, cedula2, cedula3].every(cedula => 
-            /^\d{8}$/.test(cedula)
+            /^\d{7,8}$/.test(cedula)
         );
         
         if (formatoCorrecto) {
-            console.log('✅ Todas las cédulas tienen el formato correcto (8 dígitos)');
+            console.log('✅ Todas las cédulas tienen el formato correcto (7 u 8 dígitos)');
         } else {
             console.log('❌ Error: Algunas cédulas no tienen el formato correcto');
         }

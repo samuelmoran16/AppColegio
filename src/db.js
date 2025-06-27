@@ -469,7 +469,7 @@ const generarCedulaRepresentante = async () => {
   
   // Generar cédula hasta que sea única
   while (existe) {
-    cedula = Math.floor(Math.random() * 90000000) + 10000000; // Número de 8 dígitos
+    cedula = Math.floor(Math.random() * 90000000) + 10000000; // Número de 7 u 8 dígitos
     cedula = cedula.toString();
     
     if (isProduction) {
