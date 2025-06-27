@@ -8,7 +8,7 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 8080;
 
 // Función helper para manejar parámetros de consulta según la base de datos
 const getQueryParams = (params) => {
@@ -1340,7 +1340,6 @@ app.get('/', (req, res) => {
 app.listen(port, '0.0.0.0', () => {
   console.log(`🌐 Servidor escuchando en:`);
   console.log(`   Local: http://localhost:${port}`);
-  console.log(`   Red local: http://192.168.0.169:${port}`);
-  console.log(`   Internet: http://186.24.140.90:${port}`);
-  console.log(`📱 Ahora puedes acceder desde cualquier dispositivo conectado a tu red móvil`);
+  console.log(`   Red local: http://172.20.10.8:${port}`);
+  console.log(`📱 Ahora puedes acceder desde tu teléfono usando la IP de red local`);
 });
