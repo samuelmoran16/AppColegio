@@ -160,7 +160,8 @@ app.get('/logout', (req, res) => {
             console.error('Error en logout:', err);
             return res.status(500).json({ message: 'No se pudo cerrar sesión' });
         }
-        res.json({ success: true, redirect: '/login.html' });
+        // Redirigir directamente al login en lugar de devolver JSON
+        res.redirect('/login.html');
     });
 });
 
