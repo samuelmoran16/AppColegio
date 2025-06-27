@@ -148,6 +148,8 @@
                 data.cedula = formData.get('cedula');
             }
 
+            console.log('🔐 Enviando datos de login:', data);
+
             try {
                 const response = await fetch('/login', {
                     method: 'POST',
@@ -157,17 +159,22 @@
                     body: JSON.stringify(data)
                 });
 
+                console.log('📡 Respuesta del servidor:', response.status, response.statusText);
+
                 const result = await response.json();
+                console.log('📄 Datos recibidos:', result);
 
                 if (response.ok && result.success) {
                     // Login exitoso - redirigir
+                    console.log('✅ Login exitoso, redirigiendo a:', result.redirect);
                     window.location.href = result.redirect;
                 } else {
                     // Error en login
+                    console.log('❌ Error en login:', result.message);
                     showAlert(result.message || 'Error al iniciar sesión');
                 }
             } catch (error) {
-                console.error('Error:', error);
+                console.error('💥 Error de conexión:', error);
                 showAlert('Error de conexión. Inténtalo de nuevo.');
             } finally {
                 setLoading(false);

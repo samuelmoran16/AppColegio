@@ -56,7 +56,7 @@ const initDB = async () => {
 
       await pool.query(`CREATE TABLE IF NOT EXISTS representantes (
         id SERIAL PRIMARY KEY,
-        cedula VARCHAR(8) UNIQUE NOT NULL,
+        cedula VARCHAR(10) UNIQUE NOT NULL,
         nombre VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL
@@ -64,7 +64,7 @@ const initDB = async () => {
 
       await pool.query(`CREATE TABLE IF NOT EXISTS maestros (
         id SERIAL PRIMARY KEY,
-        cedula VARCHAR(8) UNIQUE NOT NULL,
+        cedula VARCHAR(10) UNIQUE NOT NULL,
         nombre VARCHAR(255) NOT NULL,
         apellido VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
@@ -79,7 +79,7 @@ const initDB = async () => {
         cedula VARCHAR(20),
         fecha_nacimiento DATE,
         grado VARCHAR(50),
-        cedula_representante VARCHAR(8) REFERENCES representantes(cedula)
+        cedula_representante VARCHAR(10) REFERENCES representantes(cedula)
       )`);
 
       await pool.query(`CREATE TABLE IF NOT EXISTS notas (
@@ -172,6 +172,9 @@ const initDB = async () => {
 
     // Migración de la tabla Notas
     await migrarTablaNotas();
+
+    // Corregir estructura de PostgreSQL en producción
+    await corregirEstructuraPostgreSQL();
 
     // Insertar admin por defecto si no existe
     const adminEmail = 'admin@colegio.com';
@@ -537,7 +540,7 @@ const migrarTablaRepresentantes = async () => {
           console.log('Migrando tabla de representantes para añadir cédulas...');
           
           // Añadir la columna cedula
-          await pool.query('ALTER TABLE representantes ADD COLUMN cedula VARCHAR(8) UNIQUE');
+          await pool.query('ALTER TABLE representantes ADD COLUMN cedula VARCHAR(10) UNIQUE');
           
           // Generar cédulas para representantes existentes
           const representantes = await pool.query('SELECT id FROM representantes ORDER BY id');
@@ -627,7 +630,7 @@ const migrarRepresentanteEstudiante = async () => {
         console.log('Migrando tabla de estudiantes para usar cedula_representante...');
         
         // Añadir la columna cedula_representante
-        await pool.query('ALTER TABLE estudiantes ADD COLUMN cedula_representante VARCHAR(8) REFERENCES representantes(cedula)');
+        await pool.query('ALTER TABLE estudiantes ADD COLUMN cedula_representante VARCHAR(10) REFERENCES representantes(cedula)');
         
         // Migrar datos existentes
         const estudiantes = await pool.query('SELECT id, id_representante FROM estudiantes WHERE id_representante IS NOT NULL');
@@ -786,6 +789,85 @@ const migrarTablaNotas = async () => {
   } catch (err) {
     console.error('Error migrando tabla de notas:', err);
     throw err;
+  }
+};
+
+// Función para corregir estructura de PostgreSQL en Render
+const corregirEstructuraPostgreSQL = async () => {
+  try {
+    const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+    
+    if (isProduction) {
+      console.log('🔧 Verificando y corrigiendo estructura de PostgreSQL...');
+      
+      // Verificar si la columna cedula tiene la longitud correcta
+      const columns = await pool.query(`
+        SELECT column_name, data_type, character_maximum_length
+        FROM information_schema.columns 
+        WHERE table_name = 'representantes' 
+        AND column_name = 'cedula'
+        AND table_schema = 'public';
+      `);
+      
+      if (columns.rows.length > 0) {
+        const cedulaColumn = columns.rows[0];
+        console.log(`   Columna cedula: ${cedulaColumn.data_type}(${cedulaColumn.character_maximum_length})`);
+        
+        // Si la columna es VARCHAR(8), cambiarla a VARCHAR(10)
+        if (cedulaColumn.character_maximum_length === 8) {
+          console.log('   ⚠️  Corrigiendo longitud de columna cedula...');
+          
+          // Eliminar restricciones UNIQUE primero
+          const constraints = await pool.query(`
+            SELECT constraint_name 
+            FROM information_schema.table_constraints 
+            WHERE table_name = 'representantes' 
+            AND constraint_type = 'UNIQUE'
+            AND constraint_name LIKE '%cedula%';
+          `);
+          
+          for (let constraint of constraints.rows) {
+            console.log(`   🗑️  Eliminando restricción: ${constraint.constraint_name}`);
+            await pool.query(`ALTER TABLE representantes DROP CONSTRAINT ${constraint.constraint_name}`);
+          }
+          
+          // Cambiar el tipo de columna
+          await pool.query('ALTER TABLE representantes ALTER COLUMN cedula TYPE VARCHAR(10)');
+          console.log('   ✅ Columna cedula corregida a VARCHAR(10)');
+          
+          // Recrear la restricción UNIQUE
+          await pool.query('ALTER TABLE representantes ADD CONSTRAINT representantes_cedula_unique UNIQUE (cedula)');
+          console.log('   ✅ Restricción UNIQUE recreada');
+        } else {
+          console.log('   ✅ La columna cedula ya tiene la longitud correcta');
+        }
+      }
+      
+      // Verificar que Vanessa Quiñones esté en la base de datos
+      const vanessa = await pool.query(`
+        SELECT id FROM representantes 
+        WHERE nombre ILIKE '%vanessa%' OR nombre ILIKE '%quiñones%'
+      `);
+      
+      if (vanessa.rows.length === 0) {
+        console.log('   ⚠️  Vanessa Quiñones no encontrada, insertando...');
+        const hash = await bcrypt.hash('test123', 10);
+        
+        await pool.query(`
+          INSERT INTO representantes (cedula, nombre, email, password) 
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT (cedula) DO NOTHING
+        `, ['14922458', 'Vanessa Quiñones', 'vanequinones@gmail.com', hash]);
+        
+        console.log('   ✅ Vanessa Quiñones insertada');
+      } else {
+        console.log('   ✅ Vanessa Quiñones ya existe en la base de datos');
+      }
+      
+      console.log('🎉 Estructura de PostgreSQL corregida exitosamente!');
+    }
+  } catch (err) {
+    console.error('Error corrigiendo estructura de PostgreSQL:', err);
   }
 };
 

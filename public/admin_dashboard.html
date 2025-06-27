@@ -613,12 +613,18 @@
                 return;
             }
             
-            representantes.forEach(rep => {
+            // Agregar contador de representantes
+            const contador = document.createElement('div');
+            contador.className = 'alert alert-info mb-3';
+            contador.innerHTML = `<strong>📊 Total de representantes: ${representantes.length}</strong>`;
+            listaRepresentantes.appendChild(contador);
+            
+            representantes.forEach((rep, index) => {
                 const li = document.createElement('li');
                 li.className = 'list-group-item d-flex justify-content-between align-items-center';
                 li.innerHTML = `
                     <div>
-                        <strong>${rep.nombre}</strong><br>
+                        <strong>${index + 1}. ${rep.nombre}</strong><br>
                         <small class="text-muted">Cédula: ${rep.cedula} | Email: ${rep.email}</small>
                     </div>
                     <div>
