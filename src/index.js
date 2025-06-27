@@ -253,8 +253,8 @@ app.post('/api/representantes', auth('admin'), async (req, res) => {
         return res.status(400).json({ message: 'Todos los campos son obligatorios.' });
     }
     
-    if (!/^\d{7,8}$/.test(cedula)) {
-        return res.status(400).json({ message: 'La cédula debe tener 7 u 8 dígitos.' });
+    if (!/^\d{8}$/.test(cedula)) {
+        return res.status(400).json({ message: 'La cédula debe tener exactamente 8 dígitos.' });
     }
     
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -1082,8 +1082,8 @@ app.post('/api/maestros', auth('admin'), async (req, res) => {
     }
     
     // Validar formato de cédula (8 dígitos)
-    if (!/^\d{7,8}$/.test(cedula)) {
-        return res.status(400).json({ message: 'La cédula debe tener 7 u 8 dígitos.' });
+    if (!/^\d{8}$/.test(cedula)) {
+        return res.status(400).json({ message: 'La cédula debe tener exactamente 8 dígitos.' });
     }
     
     try {

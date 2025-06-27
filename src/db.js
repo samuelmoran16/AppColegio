@@ -56,7 +56,7 @@ const initDB = async () => {
 
       await pool.query(`CREATE TABLE IF NOT EXISTS representantes (
         id SERIAL PRIMARY KEY,
-        cedula VARCHAR(10) UNIQUE NOT NULL,
+        cedula VARCHAR(8) UNIQUE NOT NULL,
         nombre VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL
@@ -64,7 +64,7 @@ const initDB = async () => {
 
       await pool.query(`CREATE TABLE IF NOT EXISTS maestros (
         id SERIAL PRIMARY KEY,
-        cedula VARCHAR(10) UNIQUE NOT NULL,
+        cedula VARCHAR(8) UNIQUE NOT NULL,
         nombre VARCHAR(255) NOT NULL,
         apellido VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
@@ -79,7 +79,7 @@ const initDB = async () => {
         cedula VARCHAR(20),
         fecha_nacimiento DATE,
         grado VARCHAR(50),
-        cedula_representante VARCHAR(10) REFERENCES representantes(cedula)
+        cedula_representante VARCHAR(8) REFERENCES representantes(cedula)
       )`);
 
       await pool.query(`CREATE TABLE IF NOT EXISTS notas (
@@ -172,9 +172,6 @@ const initDB = async () => {
 
     // Migración de la tabla Notas
     await migrarTablaNotas();
-
-    // Forzar corrección de estructura PostgreSQL para cédulas 7-8 dígitos
-    await corregirEstructuraPostgreSQL();
 
     // Insertar admin por defecto si no existe
     const adminEmail = 'admin@colegio.com';
@@ -472,7 +469,7 @@ const generarCedulaRepresentante = async () => {
   
   // Generar cédula hasta que sea única
   while (existe) {
-    cedula = Math.floor(Math.random() * 90000000) + 10000000; // Número de 7 u 8 dígitos
+    cedula = Math.floor(Math.random() * 90000000) + 10000000; // Número de 8 dígitos
     cedula = cedula.toString();
     
     if (isProduction) {
@@ -540,7 +537,7 @@ const migrarTablaRepresentantes = async () => {
           console.log('Migrando tabla de representantes para añadir cédulas...');
           
           // Añadir la columna cedula
-          await pool.query('ALTER TABLE representantes ADD COLUMN cedula VARCHAR(10) UNIQUE');
+          await pool.query('ALTER TABLE representantes ADD COLUMN cedula VARCHAR(8) UNIQUE');
           
           // Generar cédulas para representantes existentes
           const representantes = await pool.query('SELECT id FROM representantes ORDER BY id');
@@ -630,7 +627,7 @@ const migrarRepresentanteEstudiante = async () => {
         console.log('Migrando tabla de estudiantes para usar cedula_representante...');
         
         // Añadir la columna cedula_representante
-        await pool.query('ALTER TABLE estudiantes ADD COLUMN cedula_representante VARCHAR(10) REFERENCES representantes(cedula)');
+        await pool.query('ALTER TABLE estudiantes ADD COLUMN cedula_representante VARCHAR(8) REFERENCES representantes(cedula)');
         
         // Migrar datos existentes
         const estudiantes = await pool.query('SELECT id, id_representante FROM estudiantes WHERE id_representante IS NOT NULL');
@@ -789,88 +786,6 @@ const migrarTablaNotas = async () => {
   } catch (err) {
     console.error('Error migrando tabla de notas:', err);
     throw err;
-  }
-};
-
-// Función para forzar la corrección de estructura PostgreSQL para cédulas 7-8 dígitos
-const corregirEstructuraPostgreSQL = async () => {
-  try {
-    const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
-    
-    if (isProduction) {
-      console.log('🔧 Verificando y corrigiendo estructura PostgreSQL para cédulas 7-8 dígitos...');
-      
-      // 1. Verificar y corregir tabla representantes
-      const repStructure = await pool.query(`
-        SELECT column_name, data_type, character_maximum_length
-        FROM information_schema.columns 
-        WHERE table_name = 'representantes' AND column_name = 'cedula'
-      `);
-      
-      if (repStructure.rows.length > 0) {
-        const cedulaColumn = repStructure.rows[0];
-        if (cedulaColumn.character_maximum_length === 8) {
-          console.log('🔧 Cambiando longitud de cédula en representantes de 8 a 10 caracteres...');
-          try {
-            await pool.query('ALTER TABLE representantes ALTER COLUMN cedula TYPE VARCHAR(10)');
-            console.log('✅ Longitud de cédula en representantes actualizada a VARCHAR(10)');
-          } catch (err) {
-            console.log('⚠️ No se pudo cambiar la longitud de cédula en representantes:', err.message);
-          }
-        } else {
-          console.log('✅ Longitud de cédula en representantes ya es correcta');
-        }
-      }
-      
-      // 2. Verificar y corregir tabla maestros
-      const maestrosStructure = await pool.query(`
-        SELECT column_name, data_type, character_maximum_length
-        FROM information_schema.columns 
-        WHERE table_name = 'maestros' AND column_name = 'cedula'
-      `);
-      
-      if (maestrosStructure.rows.length > 0) {
-        const cedulaColumn = maestrosStructure.rows[0];
-        if (cedulaColumn.character_maximum_length === 8) {
-          console.log('🔧 Cambiando longitud de cédula en maestros de 8 a 10 caracteres...');
-          try {
-            await pool.query('ALTER TABLE maestros ALTER COLUMN cedula TYPE VARCHAR(10)');
-            console.log('✅ Longitud de cédula en maestros actualizada a VARCHAR(10)');
-          } catch (err) {
-            console.log('⚠️ No se pudo cambiar la longitud de cédula en maestros:', err.message);
-          }
-        } else {
-          console.log('✅ Longitud de cédula en maestros ya es correcta');
-        }
-      }
-      
-      // 3. Verificar y corregir tabla estudiantes
-      const estStructure = await pool.query(`
-        SELECT column_name, data_type, character_maximum_length
-        FROM information_schema.columns 
-        WHERE table_name = 'estudiantes' AND column_name = 'cedula_representante'
-      `);
-      
-      if (estStructure.rows.length > 0) {
-        const cedulaColumn = estStructure.rows[0];
-        if (cedulaColumn.character_maximum_length === 8) {
-          console.log('🔧 Cambiando longitud de cedula_representante en estudiantes de 8 a 10 caracteres...');
-          try {
-            await pool.query('ALTER TABLE estudiantes ALTER COLUMN cedula_representante TYPE VARCHAR(10)');
-            console.log('✅ Longitud de cedula_representante en estudiantes actualizada a VARCHAR(10)');
-          } catch (err) {
-            console.log('⚠️ No se pudo cambiar la longitud de cedula_representante en estudiantes:', err.message);
-          }
-        } else {
-          console.log('✅ Longitud de cedula_representante en estudiantes ya es correcta');
-        }
-      }
-      
-      console.log('✅ Verificación y corrección de estructura PostgreSQL completada');
-    }
-  } catch (err) {
-    console.error('Error corrigiendo estructura PostgreSQL:', err);
-    // No lanzar error para que la aplicación continúe funcionando
   }
 };
 
