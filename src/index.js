@@ -1276,6 +1276,63 @@ app.delete('/api/maestros/:id', auth('admin'), async (req, res) => {
     }
 });
 
+// Ruta para arreglar secuencias de PostgreSQL (solo en producción)
+app.get('/api/admin/arreglar-secuencias', auth('admin'), async (req, res) => {
+    if (!isProduction()) {
+        return res.status(400).json({ message: 'Esta función solo está disponible en producción.' });
+    }
+    
+    try {
+        console.log('🔧 Arreglando secuencias de auto-incremento en PostgreSQL...');
+        
+        // 1. Arreglar secuencia de representantes
+        console.log('1. Arreglando secuencia de representantes...');
+        await db.query(`SELECT setval('representantes_id_seq', (SELECT MAX(id) FROM representantes))`);
+        
+        // 2. Arreglar secuencia de maestros
+        console.log('2. Arreglando secuencia de maestros...');
+        await db.query(`SELECT setval('maestros_id_seq', (SELECT MAX(id) FROM maestros))`);
+        
+        // 3. Arreglar secuencia de estudiantes
+        console.log('3. Arreglando secuencia de estudiantes...');
+        await db.query(`SELECT setval('estudiantes_id_seq', (SELECT MAX(id) FROM estudiantes))`);
+        
+        // 4. Verificar valores actuales
+        const representantesSeq = await db.query("SELECT currval('representantes_id_seq') as current_value");
+        const maestrosSeq = await db.query("SELECT currval('maestros_id_seq') as current_value");
+        const estudiantesSeq = await db.query("SELECT currval('estudiantes_id_seq') as current_value");
+        
+        // 5. Verificar máximos valores en las tablas
+        const maxRepresentantes = await db.query("SELECT MAX(id) as max_id FROM representantes");
+        const maxMaestros = await db.query("SELECT MAX(id) as max_id FROM maestros");
+        const maxEstudiantes = await db.query("SELECT MAX(id) as max_id FROM estudiantes");
+        
+        const resultado = {
+            message: '✅ Secuencias arregladas correctamente',
+            secuencias: {
+                representantes: representantesSeq.rows[0].current_value,
+                maestros: maestrosSeq.rows[0].current_value,
+                estudiantes: estudiantesSeq.rows[0].current_value
+            },
+            maximos: {
+                representantes: maxRepresentantes.rows[0].max_id,
+                maestros: maxMaestros.rows[0].max_id,
+                estudiantes: maxEstudiantes.rows[0].max_id
+            }
+        };
+        
+        console.log('✅ Secuencias arregladas:', resultado);
+        res.json(resultado);
+        
+    } catch (error) {
+        console.error('❌ Error arreglando secuencias:', error);
+        res.status(500).json({ 
+            message: 'Error al arreglar las secuencias',
+            error: error.message 
+        });
+    }
+});
+
 app.get('/', (req, res) => {
   res.redirect('/login.html');
 });
