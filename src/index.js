@@ -8,7 +8,7 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 // Función helper para manejar parámetros de consulta según la base de datos
 const getQueryParams = (params) => {
@@ -28,25 +28,39 @@ const getUniqueConstraintError = () => {
     return isProduction ? '23505' : 'SQLITE_CONSTRAINT_UNIQUE';
 };
 
+// Función helper para detectar el entorno de base de datos
+const isProduction = () => process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+
 // Inicializar DB
 initDB();
 
-// Middlewares
+// Middlewares optimizados
 app.use(express.static(path.join(__dirname, '..', 'public')));
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.json());
+app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '10mb' }));
 app.use(session({
-  secret: 'tu_super_secreto_aqui', // Cambia esto por un secreto real
+  secret: process.env.SESSION_SECRET || 'tu_super_secreto_aqui',
   resave: false,
-  saveUninitialized: true,
-  cookie: { secure: false } // Poner en true si usas HTTPS
+  saveUninitialized: false,
+  cookie: { 
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 24 * 60 * 60 * 1000 // 24 horas
+  }
 }));
 
-// Rutas de Login
+// Middleware para logging de requests
+app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+    next();
+});
+
+// Rutas de Login optimizadas
 app.post('/login', async (req, res) => {
     const { email, password, role } = req.body;
     
-    console.log('Intento de login:', { email, role }); // Log para debug
+    if (!email || !password || !role) {
+        return res.status(400).json({ message: 'Todos los campos son obligatorios' });
+    }
     
     let tableName = '';
     if (role === 'admin') tableName = 'administradores';
@@ -54,72 +68,62 @@ app.post('/login', async (req, res) => {
     if (role === 'maestro') tableName = 'maestros';
 
     if (!tableName) {
-        console.log('Rol no válido:', role);
-        return res.status(400).send('Rol no válido');
+        return res.status(400).json({ message: 'Rol no válido' });
     }
     
     try {
-        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
-        const query = isProduction ? 
+        const query = isProduction() ? 
             `SELECT * FROM ${tableName} WHERE email = $1` : 
             `SELECT * FROM ${tableName} WHERE email = ?`;
         
-        console.log('Ejecutando query:', query, 'con email:', email);
-        
         const result = await db.query(query, [email]);
-        console.log('Resultado de la consulta:', result.rows.length, 'filas encontradas');
-        
         const user = result.rows[0];
 
         if (!user) {
-            console.log('Usuario no encontrado');
-            return res.status(401).send('Credenciales incorrectas');
+            return res.status(401).json({ message: 'Credenciales incorrectas' });
         }
         
-        console.log('Usuario encontrado, verificando contraseña...');
         const match = await bcrypt.compare(password, user.password);
         
         if (match) {
-            console.log('Contraseña correcta, creando sesión...');
-            req.session.user = { id: user.id, email: user.email, role: role };
+            req.session.user = { 
+                id: user.id, 
+                email: user.email, 
+                role: role,
+                nombre: user.nombre || `${user.nombre} ${user.apellido || ''}`.trim()
+            };
             
-            if (role === 'admin') {
-                console.log('Redirigiendo a admin dashboard');
-                res.redirect('/admin/dashboard');
-            } else if (role === 'maestro') {
-                console.log('Redirigiendo a maestro dashboard');
-                res.redirect('/maestro/dashboard');
-            } else {
-                console.log('Redirigiendo a representante dashboard');
-                res.redirect('/representante/dashboard');
-            }
+            const redirectUrl = role === 'admin' ? '/admin/dashboard' : 
+                               role === 'maestro' ? '/maestro/dashboard' : 
+                               '/representante/dashboard';
+            
+            res.json({ success: true, redirect: redirectUrl });
         } else {
-            console.log('Contraseña incorrecta');
-            res.status(401).send('Credenciales incorrectas');
+            res.status(401).json({ message: 'Credenciales incorrectas' });
         }
     } catch (err) {
         console.error('Error en login:', err);
-        res.status(500).send('Error del servidor');
+        res.status(500).json({ message: 'Error del servidor' });
     }
 });
 
 // Ruta de Logout
 app.get('/logout', (req, res) => {
     req.session.destroy(err => {
-        if (err) return res.status(500).send('No se pudo cerrar sesión');
-        res.redirect('/login.html');
+        if (err) {
+            console.error('Error en logout:', err);
+            return res.status(500).json({ message: 'No se pudo cerrar sesión' });
+        }
+        res.json({ success: true, redirect: '/login.html' });
     });
 });
 
-// Middleware para proteger rutas
+// Middleware para proteger rutas optimizado
 const auth = (role) => (req, res, next) => {
     if (req.session.user && req.session.user.role === role) {
         return next();
     }
     
-    // Si no está autenticado, responder de forma inteligente
-    // Si la petición espera JSON (una API), se envía un error JSON.
-    // Si no, se redirige a la página de login.
     if (req.accepts('json')) {
         res.status(403).json({ message: 'Acceso no autorizado. Por favor, inicie sesión de nuevo.' });
     } else {
@@ -127,7 +131,7 @@ const auth = (role) => (req, res, next) => {
     }
 };
 
-// Rutas protegidas (ejemplos)
+// Rutas protegidas
 app.get('/admin/dashboard', auth('admin'), (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'public', 'admin_dashboard.html'));
 });
@@ -140,54 +144,78 @@ app.get('/maestro/dashboard', auth('maestro'), (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'public', 'maestro_dashboard.html'));
 });
 
-// --- API para Administrador ---
+// --- API para Administrador optimizada ---
 
-// Obtener todos los representantes
+// Obtener todos los representantes con paginación
 app.get('/api/representantes', auth('admin'), async (req, res) => {
     try {
-        const result = await db.query('SELECT id, cedula, nombre, email FROM representantes ORDER BY nombre');
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 50;
+        const offset = (page - 1) * limit;
+        
+        const query = isProduction() ? 
+            'SELECT id, cedula, nombre, email FROM representantes ORDER BY nombre LIMIT $1 OFFSET $2' :
+            'SELECT id, cedula, nombre, email FROM representantes ORDER BY nombre LIMIT ? OFFSET ?';
+        
+        const result = await db.query(query, [limit, offset]);
         res.json(result.rows);
     } catch (err) {
-        console.error(err);
+        console.error('Error obteniendo representantes:', err);
         res.status(500).json({ message: 'Error al obtener los representantes' });
     }
 });
 
-// Obtener todos los maestros
+// Obtener todos los maestros con paginación
 app.get('/api/maestros', auth('admin'), async (req, res) => {
     try {
-        const result = await db.query('SELECT id, cedula, nombre, apellido, email, grado_asignado FROM maestros ORDER BY nombre');
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 50;
+        const offset = (page - 1) * limit;
+        
+        const query = isProduction() ? 
+            'SELECT id, cedula, nombre, apellido, email, grado_asignado FROM maestros ORDER BY nombre LIMIT $1 OFFSET $2' :
+            'SELECT id, cedula, nombre, apellido, email, grado_asignado FROM maestros ORDER BY nombre LIMIT ? OFFSET ?';
+        
+        const result = await db.query(query, [limit, offset]);
         res.json(result.rows);
     } catch (err) {
-        console.error(err);
+        console.error('Error obteniendo maestros:', err);
         res.status(500).json({ message: 'Error al obtener los maestros' });
     }
 });
 
-// Registrar un nuevo representante
+// Registrar un nuevo representante optimizado
 app.post('/api/representantes', auth('admin'), async (req, res) => {
     const { cedula, nombre, email, password } = req.body;
+    
+    // Validaciones mejoradas
     if (!cedula || !nombre || !email || !password) {
         return res.status(400).json({ message: 'Todos los campos son obligatorios.' });
     }
     
-    // Validar formato de cédula (8 dígitos)
     if (!/^\d{8}$/.test(cedula)) {
         return res.status(400).json({ message: 'La cédula debe tener exactamente 8 dígitos.' });
+    }
+    
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ message: 'El formato del email no es válido.' });
+    }
+    
+    if (password.length < 6) {
+        return res.status(400).json({ message: 'La contraseña debe tener al menos 6 caracteres.' });
     }
     
     try {
         const hash = await bcrypt.hash(password, 10);
         
-        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
-        const query = isProduction ? 
+        const query = isProduction() ? 
             'INSERT INTO representantes (cedula, nombre, email, password) VALUES ($1, $2, $3, $4) RETURNING id, cedula, nombre, email' :
             'INSERT INTO representantes (cedula, nombre, email, password) VALUES (?, ?, ?, ?) RETURNING id, cedula, nombre, email';
         
         const result = await db.query(query, [cedula, nombre, email, hash]);
         res.status(201).json(result.rows[0]);
     } catch (err) {
-        console.error(err);
+        console.error('Error registrando representante:', err);
         if (err.code === getUniqueConstraintError()) {
             return res.status(409).json({ message: 'La cédula o el correo electrónico ya están registrados.' });
         }
@@ -195,16 +223,27 @@ app.post('/api/representantes', auth('admin'), async (req, res) => {
     }
 });
 
-// Registrar un nuevo estudiante
+// Registrar un nuevo estudiante optimizado
 app.post('/api/estudiantes', auth('admin'), async (req, res) => {
     const { nombre, cedula, fecha_nacimiento, grado, cedula_representante } = req.body;
-     if (!nombre || !cedula_representante || !grado) {
+    
+    if (!nombre || !cedula_representante || !grado) {
         return res.status(400).json({ message: 'Nombre, Grado y Cédula del Representante son obligatorios.' });
     }
+    
+    // Validar que el grado sea válido
+    const gradosValidos = [
+        '1er Nivel Pre-Escolar', '2do Nivel Pre-Escolar', '3er Nivel Pre-Escolar',
+        '1er Grado', '2do Grado', '3er Grado', '4to Grado', '5to Grado', '6to Grado'
+    ];
+    
+    if (!gradosValidos.includes(grado)) {
+        return res.status(400).json({ message: 'El grado especificado no es válido.' });
+    }
+    
     try {
         // Verificar que el representante existe
-        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
-        const representanteQuery = isProduction ? 
+        const representanteQuery = isProduction() ? 
             'SELECT id FROM representantes WHERE cedula = $1' : 
             'SELECT id FROM representantes WHERE cedula = ?';
         const representanteResult = await db.query(representanteQuery, [cedula_representante]);
@@ -216,15 +255,15 @@ app.post('/api/estudiantes', auth('admin'), async (req, res) => {
         // Generar carnet único
         const carnet = await generarCarnetUnico();
         
-        const query = isProduction ? 
+        const query = isProduction() ? 
             'INSERT INTO estudiantes (carnet, nombre, cedula, fecha_nacimiento, grado, cedula_representante) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *' :
             'INSERT INTO estudiantes (carnet, nombre, cedula, fecha_nacimiento, grado, cedula_representante) VALUES (?, ?, ?, ?, ?, ?) RETURNING *';
         
         const result = await db.query(query, [carnet, nombre, cedula || null, fecha_nacimiento || null, grado, cedula_representante]);
         res.status(201).json(result.rows[0]);
     } catch (err) {
-        console.error(err);
-         if (err.code === getUniqueConstraintError()) { 
+        console.error('Error registrando estudiante:', err);
+        if (err.code === getUniqueConstraintError()) { 
             return res.status(409).json({ message: 'La cédula ya está registrada por otro estudiante.' });
         }
         res.status(500).json({ message: 'Error al registrar el estudiante' });
@@ -351,18 +390,42 @@ app.put('/api/estudiantes/:id', auth('admin'), async (req, res) => {
     }
 });
 
-// Obtener todos los estudiantes
+// Obtener todos los estudiantes con paginación y filtros
 app.get('/api/estudiantes', auth('admin'), async (req, res) => {
     try {
-        const result = await db.query(`
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 50;
+        const offset = (page - 1) * limit;
+        const grado = req.query.grado;
+        const search = req.query.search;
+        
+        let whereClause = '';
+        let params = [];
+        
+        if (grado) {
+            whereClause = 'WHERE e.grado = ?';
+            params.push(grado);
+        }
+        
+        if (search) {
+            whereClause = whereClause ? `${whereClause} AND (e.nombre LIKE ? OR e.carnet LIKE ?)` : 'WHERE e.nombre LIKE ? OR e.carnet LIKE ?';
+            params.push(`%${search}%`, `%${search}%`);
+        }
+        
+        const query = `
             SELECT e.id, e.carnet, e.nombre, e.cedula, e.grado, r.cedula as cedula_representante, r.nombre as nombre_representante 
             FROM estudiantes e 
             JOIN representantes r ON e.cedula_representante = r.cedula 
-            ORDER BY e.nombre
-        `);
+            ${whereClause}
+            ORDER BY e.nombre 
+            LIMIT ? OFFSET ?
+        `;
+        
+        params.push(limit, offset);
+        const result = await db.query(query, params);
         res.json(result.rows);
     } catch (err) {
-        console.error(err);
+        console.error('Error obteniendo estudiantes:', err);
         res.status(500).json({ message: 'Error al obtener los estudiantes' });
     }
 });
@@ -845,10 +908,15 @@ app.post('/api/representante/pagos', auth('representante'), async (req, res) => 
 app.get('/api/admin/estudiantes/:id/notas', auth('admin'), async (req, res) => {
     const { id } = req.params;
     try {
-        const notasResult = await db.query('SELECT id, materia, calificacion, periodo FROM notas WHERE id_estudiante = ? ORDER BY periodo, materia', [id]);
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+        const query = isProduction ? 
+            'SELECT id, materia, calificacion, periodo, tipo_calificacion FROM notas WHERE id_estudiante = $1 ORDER BY periodo, materia' : 
+            'SELECT id, materia, calificacion, periodo, tipo_calificacion FROM notas WHERE id_estudiante = ? ORDER BY periodo, materia';
+        
+        const notasResult = await db.query(query, [id]);
         res.json(notasResult.rows);
     } catch (err) {
-        console.error(err);
+        console.error('Error al obtener notas:', err);
         res.status(500).json({ message: 'Error al obtener las notas del estudiante.' });
     }
 });
@@ -861,10 +929,11 @@ app.put('/api/notas/:id', auth('admin'), async (req, res) => {
         return res.status(400).json({ message: 'Todos los campos son obligatorios.' });
     }
     try {
-        const result = await db.query(
-            'UPDATE notas SET materia = ?, calificacion = ?, periodo = ? WHERE id = ? RETURNING *',
-            [materia, calificacion, periodo, id]
-        );
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+        const query = isProduction ? 
+            'UPDATE notas SET materia = $1, calificacion = $2, periodo = $3 WHERE id = $4 RETURNING *' :
+            'UPDATE notas SET materia = ?, calificacion = ?, periodo = ? WHERE id = ? RETURNING *';
+        const result = await db.query(query, [materia, calificacion, periodo, id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ message: 'Nota no encontrada.' });
         }
@@ -879,7 +948,11 @@ app.put('/api/notas/:id', auth('admin'), async (req, res) => {
 app.delete('/api/notas/:id', auth('admin'), async (req, res) => {
     const { id } = req.params;
     try {
-        const result = await db.query('DELETE FROM notas WHERE id = ?', [id]);
+        const isProduction = process.env.NODE_ENV === 'production' && process.env.DATABASE_URL;
+        const query = isProduction ? 
+            'DELETE FROM notas WHERE id = $1' : 
+            'DELETE FROM notas WHERE id = ?';
+        const result = await db.query(query, [id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ message: 'Nota no encontrada.' });
         }
